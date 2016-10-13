@@ -3,8 +3,8 @@
 > module Text.Regex.Deriv.Common 
 >     ( Range(..), range, minRange, maxRange
 >     , Letter
->     , PosEpsilon (..)
->     , IsEpsilon (..)
+>     , PosEps (..)
+>     , IsEps (..)
 >     , IsPhi (..)
 >     , Simplifiable (..)
 >     , my_hash
@@ -41,12 +41,12 @@
 > type Letter = (Char,Int)     
 
 > -- | test for 'epsilon \in a' epsilon-possession
-> class PosEpsilon a where
->     posEpsilon :: a -> Bool
+> class PosEps a where
+>     posEps :: a -> Bool
 
 > -- | test for epsilon == a
-> class IsEpsilon a where
->     isEpsilon :: a -> Bool
+> class IsEps a where
+>     isEps :: a -> Bool
 
 > -- | test for \phi == a
 > class IsPhi a where

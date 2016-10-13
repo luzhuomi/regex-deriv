@@ -7,14 +7,14 @@
 > import Data.List (nub)
 > import Data.Char (chr)
 
-> import Text.Regex.Deriv.Common (PosEpsilon(..), IsEpsilon(..), IsPhi(..), Simplifiable(..), IsGreedy(..), GFlag(..))
+> import Text.Regex.Deriv.Common (PosEps(..), IsEps(..), IsPhi(..), Simplifiable(..), IsGreedy(..), GFlag(..))
 > import Text.Regex.Deriv.Dictionary (Key(..), primeL, primeR)
 
 ------------------------
 
 > -- | data type of the regular expresions
 > data RE = Phi 
->  | Empty        -- ^ an empty exp
+>  | Eps       -- ^ an empty exp
 >  | L Char	  -- ^ a literal / a character
 >  | Choice [RE] GFlag -- ^ a choice exp 'r1 + r2'
 >  | ChoiceInt [RE] -- ^ internal choice used in the BitCode version
@@ -26,7 +26,7 @@
 
 > -- | the eq instance
 > instance Eq RE where
->     (==) Empty Empty = True
+>     (==) Eps Eps = True
 >     (==) (L x) (L y) = x == y
 >     (==) (Choice rs1 g1) (Choice rs2 g2) = (g1 == g2) && (rs2 == rs1) 
 >     (==) (ChoiceInt rs1) (ChoiceInt rs2) = (rs2 == rs1) 
@@ -39,7 +39,7 @@
 
 
 > instance Ord RE where
->     compare Empty Empty = {-# SCC "compare0" #-} EQ
+>     compare Eps Eps = {-# SCC "compare0" #-} EQ
 >     compare (L x) (L y) = {-# SCC "compare1" #-} compare x y
 >     compare (Choice rs1 _) (Choice rs2 _) =  
 >         let l1 = length rs1   
@@ -68,7 +68,7 @@
 >     compare Any Any = {-# SCC "compare6" #-} EQ
 >     compare (Not cs) (Not cs') = compare cs cs'
 >     compare r1 r2 = {-# SCC "compare7" #-} compare (assignInt r1) (assignInt r2)
->      where assignInt Empty = 0
+>      where assignInt Eps = 0
 >            assignInt (L _) = 1             
 >            assignInt (Choice _ _) = 2
 >            assignInt (Seq _ _) = 3
@@ -83,7 +83,7 @@
 > -- | A pretty printing function for regular expression
 > instance Show RE where
 >     show Phi = "{}"
->     show Empty = "<>"
+>     show Eps = "<>"
 >     show (L c) = show c
 >     show (Choice rs g) = "(" ++ show rs ++ ")" ++ show g
 >     show (ChoiceInt rs) = "(i:" ++ show rs ++ ":i)"
@@ -95,7 +95,7 @@
 
 > instance IsGreedy RE where
 >     isGreedy Phi = True
->     isGreedy Empty = False
+>     isGreedy Eps = False
 >     isGreedy (Choice _ Greedy) = True
 >     isGreedy (Choice _ NotGreedy) = False -- (isGreedy r1) || (isGreedy r2)
 >     isGreedy (Seq r1 r2) = (isGreedy r1) || (isGreedy r2)
@@ -107,7 +107,7 @@
 
 > instance Key RE where
 >     hash Phi = [0]
->     hash Empty = [1]
+>     hash Eps = [1]
 >     hash (Choice _ Greedy) = {- let x1 = head (hash r1)
 >                                      x2 = head (hash r2)
 >                                  in [ 3 +  x1 * primeL + x2 * primeR ] -} [3]
@@ -134,33 +134,33 @@
 > resToRE [] = Phi
 
 
-> instance PosEpsilon RE where
->   posEpsilon Phi = False
->   posEpsilon Empty = True
->   posEpsilon (Choice rs g) = any posEpsilon rs
->   posEpsilon (ChoiceInt rs) = any posEpsilon rs
->   posEpsilon (Seq r1 r2) = (posEpsilon r1) && (posEpsilon r2)
->   posEpsilon (Star r g) = True
->   posEpsilon (L _) = False
->   posEpsilon Any = False
->   posEpsilon (Not _) = False
+> instance PosEps RE where
+>   posEps Phi = False
+>   posEps Eps = True
+>   posEps (Choice rs g) = any posEps rs
+>   posEps (ChoiceInt rs) = any posEps rs
+>   posEps (Seq r1 r2) = (posEps r1) && (posEps r2)
+>   posEps (Star r g) = True
+>   posEps (L _) = False
+>   posEps Any = False
+>   posEps (Not _) = False
         
 
-> -- | function 'isEpsilon' checks whether epsilon = r
-> instance IsEpsilon RE where
->   isEpsilon Phi = False
->   isEpsilon Empty = True
->   isEpsilon (Choice rs g) = all isEpsilon rs
->   isEpsilon (Seq r1 r2) = (isEpsilon r1) && (isEpsilon r2)
->   isEpsilon (Star Phi g) = True
->   isEpsilon (Star r g) = isEpsilon r
->   isEpsilon (L _) = False
->   isEpsilon Any = False
->   isEpsilon (Not _) = False
+> -- | function 'isEps' checks whether epsilon = r
+> instance IsEps RE where
+>   isEps Phi = False
+>   isEps Eps = True
+>   isEps (Choice rs g) = all isEps rs
+>   isEps (Seq r1 r2) = (isEps r1) && (isEps r2)
+>   isEps (Star Phi g) = True
+>   isEps (Star r g) = isEps r
+>   isEps (L _) = False
+>   isEps Any = False
+>   isEps (Not _) = False
 
 > instance IsPhi RE where
 >   isPhi Phi = True
->   isPhi Empty = False
+>   isPhi Eps = False
 >   isPhi (Choice [] _) = True
 >   isPhi (Choice rs g) = all isPhi rs
 >   isPhi (ChoiceInt []) = True
@@ -178,17 +178,17 @@
 
 
 > partDerivSub Phi l = []
-> partDerivSub Empty l = []
+> partDerivSub Eps l = []
 > partDerivSub (L l') l 
->     | l == l'   = [Empty]
+>     | l == l'   = [Eps]
 >     | otherwise = []
-> partDerivSub Any l = [Empty]
+> partDerivSub Any l = [Eps]
 > partDerivSub (Not cs) l 
 >     | l `elem` cs = []
->     | otherwise = [Empty]
+>     | otherwise = [Eps]
 > partDerivSub (Choice rs g) l = concatMap (\ r -> partDerivSub r l) rs
 > partDerivSub (Seq r1 r2) l 
->     | posEpsilon r1 = 
+>     | posEps r1 = 
 >           let 
 >               s0 = partDerivSub r1 l
 >               s1 = s0 `seq` [ (Seq r1' r2) | r1' <- s0 ]
@@ -216,7 +216,7 @@
 > sigmaREsub (ChoiceInt rs) = concatMap sigmaREsub rs
 > sigmaREsub (Star r g) = sigmaREsub r
 > sigmaREsub Phi = []
-> sigmaREsub Empty = []
+> sigmaREsub Eps = []
 > sigmaREsub r = error $ "sigaREsub failed : " ++ show r
 
 > instance Simplifiable RE where
@@ -226,9 +226,9 @@
 >     simplify (Seq r1 r2) = 
 >         let r1' = simplify r1
 >             r2' = simplify r2
->         in if isEpsilon r1'
+>         in if isEps r1'
 >            then r2'
->            else if isEpsilon r2'
+>            else if isEps r2'
 >                 then r1'
 >                 else Seq r1' r2'
 >     simplify (Choice rs g) = 
@@ -238,4 +238,4 @@
 >            else Choice rs' g
 >     simplify (Star r g) = Star (simplify r) g
 >     simplify Phi = Phi
->     simplify Empty = Empty
+>     simplify Eps = Eps
