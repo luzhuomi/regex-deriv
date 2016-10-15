@@ -9,6 +9,7 @@
 
 > import Text.Regex.Deriv.Common (PosEps(..), IsEps(..), IsPhi(..), Simplifiable(..), IsGreedy(..), GFlag(..))
 > import Text.Regex.Deriv.Dictionary (Key(..), primeL, primeR)
+> import Text.Regex.Deriv.Pretty
 
 ------------------------
 
@@ -37,6 +38,23 @@
 >     (==) Phi Phi = True
 >     (==) _ _ = False
 
+
+> -- | the pretty instance
+> instance Pretty RE where
+>     pretty Eps = "()"
+>     pretty Phi = "{}"
+>     pretty (L c) = [c]
+>     pretty (Choice rs gf) = "(" ++ (concat $ interleave "|" (map pretty rs)) ++ ")"
+>     pretty (ChoiceInt rs) = "(" ++ (concat $ interleave "|" (map pretty rs)) ++ ")"
+>     pretty (Seq r1 r2) = "(" ++ pretty r1 ++ " " ++ pretty r2 ++ ")"
+>     pretty (Star r gf) = "(" ++ pretty r ++ ")*"
+>     pretty Any = "."
+>     pretty (Not cs) = "[~" ++ cs ++  "]"
+
+> interleave :: a -> [a] -> [a]
+> interleave _ []  = []
+> interleave _ [x] = [x]
+> interleave s (x:xs) = x:s:(interleave s xs)
 
 > instance Ord RE where
 >     compare Eps Eps = {-# SCC "compare0" #-} EQ

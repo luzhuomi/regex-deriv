@@ -3,7 +3,9 @@ module Text.Regex.Deriv.Ambiguity.Diagnosis where
 
 import Text.Regex.Deriv.RE
 import Text.Regex.Deriv.Common
+import Text.Regex.Deriv.Pretty
 import Data.List 
+import Data.Char
 import qualified Data.Map as M
 -- Parse tree representation
 data U where
@@ -72,12 +74,12 @@ mkEmptyUs (Star r _)      = [List []]
 injDs :: RE -> RE -> Char  -> U -> [U]
 injDs (Star r _) (Seq rd _) l (Pair (u, List us)) = 
   [ List (u1:us) | u1 <- injDs r rd l u ] 
-injDs (Seq r1 r2) (Choice ((Seq rd1 _):_) gf) l (AltU 0 u) = 
+injDs (Seq r1 r2) (Choice ((Seq rd1 _):_) gf) l (AltU 0 u) =  -- Choice must be binary b/c of deriv2
   let Pair (u', u'') = u 
   in [ Pair (us1, u'') | us1 <- injDs r1 rd1 l u'] 
-injDs (Seq r1 r2) (Choice (_:rd2) gf) l (AltU n u) = 
-  [ Pair (us1, us2) | us1 <- mkEmptyUs r1, us2 <- injDs r2 (Choice rd2 gf) l (AltU (n-1) u)] 
-injDs (Seq r1 r2) (Choice [] gf) l (AltU n u) = error " not possible, parse tree and regexp out of sync"
+injDs (Seq r1 r2) (Choice [_,rd2] gf) l (AltU 1 u) =  -- Choice must be binary b/c of deriv2
+  [ Pair (us1, us2) | us1 <- mkEmptyUs r1, us2 <- injDs r2 rd2 l u] 
+injDs (Seq r1 r2) (Choice [] gf) l u = error " not possible, parse tree and regexp out of sync"
 injDs (Seq r1 r2) (Seq rd1 _) l (Pair (u',u'')) = 
   [Pair (us, u'') | us <- injDs r1 rd1 l u']
 injDs (Choice (r:rs) _) (Choice (rd:rds) _) l (AltU 0 u) = 
@@ -87,15 +89,18 @@ injDs (Choice (r:rs) gf) (Choice (rd:rds) gf') l (AltU n u) =
 injDs (L l') Eps l EmptyU 
   | l == l' = [Letter l]
   | otherwise = error "impossible"
-
+injDs r1 r2 l u = error $ (pretty r1) ++ " --> " ++ (pretty r2) ++ (show u)
 
 testAmbigCase1 r = nullable r && (length $ mkEmptyUs r) > 1
 
 --
 -- u -> [u] coerce simplified parse tree back to the original parse tree
 
-simp :: RE -> (RE, U -> [U], Bool)
-simp = fixs3 simpStep 
+simp :: RE -> RE 
+simp r = let (r',_,_) = simp3 r in r'
+
+simp3 :: RE -> (RE, U -> [U], Bool)
+simp3 = fixs3 simpStep 
 
 
 fixs3 :: (RE -> (RE, U -> [U], Bool)) -> RE -> (RE, U -> [U], Bool)
@@ -209,6 +214,10 @@ flatStep (Seq r1 r2) =
   in (Seq r1' r2', f)
 flatStep (Choice rs gf) = flatChoice (Choice rs gf)      
 
+rep :: Int -> (U -> U) -> U -> U
+rep 0 op v = v
+rep n op v = rep (n-1) op (op v)
+
 flatChoice :: RE -> (RE, U ->[U])
 flatChoice (Choice [] gf) = (Choice [] gf, \u -> [u])
 flatChoice (Choice (r@(Choice rsI _):rs) gf) = -- ignoring the inner greedy flag?
@@ -216,17 +225,23 @@ flatChoice (Choice (r@(Choice rsI _):rs) gf) = -- ignoring the inner greedy flag
       l = length rsI
       g = \u -> case u of 
         { AltU n v | n < l     -> [AltU 0 (AltU n v)]
-                   | otherwise -> [AltU (n - l) v] }
-  in (Choice (rsI ++ rs') gf, g .:. f)
+                   | otherwise -> [right w | w <- f $ rep l unRight u ] }
+  in (Choice (rsI ++ rs') gf, g)
 flatChoice (Choice (r:rs) gf) = 
   let (Choice rs' _, f) = flatChoice (Choice rs gf)
       g = \u -> case u of 
         { AltU 0 v -> [ AltU 0 v ] 
-        ; AltU n v -> [ right w | w <- f (AltU n v) ]
+        ; AltU n v -> [ right w | w <- f (unRight u) ]
         } 
   in (Choice (r:rs') gf, g)
      
+{-
+(a + (b + a + c) + c) ~~> a + b + a + c + c
+AltU 1 (AltU 0 'b') <-- AltU 1 'b'
+-}
 
+e4 = Choice [L 'a', Choice [L 'b', L 'a', L 'c'] Greedy, L 'c'] Greedy
+v4' = AltU 1 (Letter 'b')
 
 
 nubChoice :: RE -> (RE, U -> [U], Bool)
@@ -305,6 +320,78 @@ r11 = Star (Seq (Star (L 'a') Greedy) (Star (L 'a') Greedy)) Greedy
 
 
 
+-- (a* (a* + a))*
+rExFail3 = Star (Seq (Star (L 'a') Greedy)
+                (Choice [Star (L 'a') Greedy,L 'a'] Greedy)) Greedy
+
+
+-- (a* a (a* + a))*
+rExFail3b = Star (Seq (Seq (Star (L 'a') Greedy) (L 'a'))
+                (Choice [Star (L 'a')  Greedy ,L 'a'] Greedy)) Greedy
+
+-- (a* (a*a + a))*
+rExFail3c = Star (Seq (Star (L 'a')  Greedy)
+                (Choice [Seq (Star (L 'a')  Greedy) (L 'a') ,L 'a'] Greedy)) Greedy
+
+-- (a a* (a* + a))*
+rExFail3d = Star (Seq (Seq (L 'a') (Star (L 'a') Greedy))
+                (Choice [Star (L 'a') Greedy,L 'a'] Greedy)) Greedy
+
+
+derivN :: Int -> Char -> RE -> RE
+derivN 0 c r = r
+derivN n c r = derivN (n-1) c (simp (deriv r c))
+
+ 
+{- shows that simp is working
+*Text.Regex.Deriv.Ambiguity.Diagnosis> derivN 1 'a' rExFail3
+Seq (Choice [Seq (Star (L 'a') ) (Choice [Star (L 'a') ,L 'a'] ),Star (L 'a') ,Eps] ) (Star (Seq (
+Star (L 'a') ) (Choice [Star (L 'a') ,L 'a'] )) )
+
+
+
+*Text.Regex.Deriv.Ambiguity.Diagnosis> derivN 2 'a' rExFail3
+Seq (Choice [Seq (Star (L 'a') ) (Choice [Star (L 'a') ,L 'a'] ),Star (L 'a') ,Eps] ) (Star (Seq (Star (L 'a') ) (Choice [Star (L 'a') ,L 'a'] )) )
+*Text.Regex.Deriv.Ambiguity.Diagnosis> derivN 3 'a' rExFail3
+Seq (Choice [Seq (Star (L 'a') ) (Choice [Star (L 'a') ,L 'a'] ),Star (L 'a') ,Eps] ) (Star (Seq (Star (L 'a') ) (Choice [Star (L 'a') ,L 'a'] )) )
+-}
+
+
+derivN3 :: Int -> RE -> Char -> (RE, U -> [U], Bool)
+derivN3 0 r c = (r, \u -> [u], False)
+derivN3 n r c = 
+  let (d, b1)     = deriv2 r c
+      f           = injDs r d c
+      (s, f', b2) = simp3 d
+      (r', g, b3) = derivN3 (n-1) s c
+  in (r', f .:. f' .:. g, b1 || b2 || b3)
+
+-- (((a)* ((a)*|a))|(a)*|()) (((a)* ((a)*|a)))*
+v5' = Pair (AltU 2 EmptyU, 
+                           List [Pair (List [Letter 'a'], AltU 0 (List [Letter 'a']))])
+v5'' = Pair (AltU 0 (Pair (List [Letter 'a'],AltU 0 (List [Letter 'a']))),
+                           List [Pair (List [Letter 'a'],AltU 0 (List [Letter 'a']))])
+v5''' = Pair (AltU 1 (List [Letter 'a']),
+                           List [Pair (List [Letter 'a'],AltU 0 (List [Letter 'a']))])
+{- testing
+let (d, b1) = deriv2 rExFail3 'a'
+let f = injDs rExFail3 d 'a'
+let v5'''' = Pair (AltU 1 (AltU 1 EmptyU),List [Pair (List [Letter 'a'],AltU 0 (List [Letter 'a']))])
+tc v5'''' d 
+True
+f v5'''' 
+error!!!
+
+
+let (s, f', b2) = simp3 d
+let (r', g, b3) = derivN3 0 'a' s
+
+-}
+-- (((a)* ((a)*|a)))* / a
+-- > (((a)* ((a)*|a)))/a  (((a)* ((a)*|a)))*
+-- > (((a)*/a ((a)*|a)) | ((a)*|a)/a) (((a)* ((a)*|a)))*
+-- > (((() (a*)) ((a)*|a)) | ((() (a)*) | ())) (((a)* ((a)*|a)))*
+-- ((((() (a)*) ((a)*|a))|((() (a)*)|())) (((a)* ((a)*|a)))*)
 
 -- no need to sort, nubchoice will dedup without changing the order
 {-
@@ -340,39 +427,30 @@ let (r2, f2', b2) = simp d2
 
 
 
--- | removes duplicate in choice
--- e.g.
--- (a + (b + (a + c))) ~> 
+-- | t : r              
+-- | check whether parse tree t is in type r
+
+tc :: U -> RE -> Bool
+tc EmptyU Eps                 = True
+tc (Letter c) (L c')          = c == c'
+tc (Letter c) Any             = True
+tc (Letter c) (Not cs)        = not (c `elem` cs)
+tc (Pair (u1,u2)) (Seq r1 r2) = (tc u1 r1) && (tc u2 r2)
+tc (AltU n u) (Choice rs gf)  = tc u (rs !! n)
+tc (List us) (Star r gf)      = all (\u -> tc u r) us
+tc _ _                        = False
 
 
+-- | 
+genV :: RE -> U
+genV Eps = EmptyU
+genV (L c) = Letter c
+genV Any   = Letter 'a'
+genV (Not cs) = Letter $ head (filter (\c -> not (c `elem` cs)) (map chr [0..255]))
+genV (Seq r1 r2) = Pair (genV r1, genV r2)
+genV (Choice rs _) = AltU 0 (genV (head rs))
+genV (Star r _) = List [ genV r ]
 
-{-
-nubs :: [RE] -> ([RE], U -> [U], Bool)
-nubs [] = ([], undefined, False)
-nubs [r] = ([r], \u -> [u], False)
-
-nubs (r:rs) = nubsN 0 (r:rs)
-
-nubsN :: Int -> [RE] -> ([RE], U -> [U], Bool)
-nubsN _ []  = ([], undefined, False)
-nubsN _ [r] = ([r], \u -> [u], False)
-nubsN pos (r:rs) = 
-  case r `elems` rs of 
-    { Just idx -> -- found duplicate
-         let (rs', f, b) = nubsN (pos+1) rs
-             dup_pos     = idx + pos
-             g = \u -> case u of 
-               { AltU n v | n == dup_pos -> [AltU n-idx v, AltU n v]
-                          | otherise     -> [AltU n v]
-               }
-         in (rs', g .:. f, True)
-    ; Nothing -> 
-           let (rs', f, b) = nubsN (pos+1) rs 
-               g = \u -> case u of 
-                 { AltU n v -> [AltU n v]  }
-           in (r:rs', 
--}               
-                
 
 simpDist :: ( RE -> (RE, U -> [U], Bool))  ->  RE -> (RE, U -> [U], Bool)
 simpDist = undefined
