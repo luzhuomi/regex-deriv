@@ -96,8 +96,13 @@ testAmbigCase1 r = nullable r && (length $ mkEmptyUs r) > 1
 --
 -- u -> [u] coerce simplified parse tree back to the original parse tree
 
+-- simplify and return the re
 simp :: RE -> RE 
 simp r = let (r',_,_) = simp3 r in r'
+
+-- simplify and return the boolean flag indicating whether A2 is applied
+simpAmbig :: RE -> Bool
+simpAmbig r = let (_,_,b) = simp3 r in b
 
 simp3 :: RE -> (RE, U -> [U], Bool)
 simp3 = fixs3 simpStep 
@@ -314,6 +319,76 @@ mkCons :: Int -> U -> U
 mkCons n | n <=0 = AltU 0
          | otherwise = AltU n 
 
+
+
+
+-- | Build a Finite State Transducer from a RE
+
+data FSTX = FSTX { start :: RE,
+                   final :: [RE],
+                   states :: [RE],
+                   transitions :: [(RE,Char,RE,U->[U])],
+                   ambig1 :: [RE],
+                   ambig2 :: [(RE,Char,RE)],
+                   ambig3 :: [(RE,Char,RE)] }
+
+buildFSTX :: RE -> FSTX
+buildFSTX r = 
+  let sig = sigmaRE r
+      
+      -- building the possible transitions given a re and a char
+      mkTransitions :: RE -> Char -> [ (RE, Char , RE, U ->[U]) ]
+      mkTransitions r l = 
+        let d = deriv r l 
+            (r'',fSimp, _ ) = simp3 d
+        in [(r, l, r'', \u -> nub $ concat [ injDs r d l u' | u' <- fSimp u ]) | not (isPhi r'')]
+           
+      -- main iteration
+      go :: ([RE], FSTX) -> [RE] -> FSTX
+      go (rs, fstx) curr_rs = 
+        let new_ts = concat $ map (\(l,r) -> mkTransitions r l)
+                         [ (l,r) | r <- curr_rs, 
+                                   l <- sig ]
+
+            new_rs = nub [ r | (_,_,r,_) <- new_ts,
+                               not (isPhi r) && not (elem r rs) ]
+
+            -- record ambiguous state A1
+            new_ambig1 = filter (\r -> testAmbigCase1 r) rs
+
+            -- record ambiguous transition A2
+            new_ambig2 = map fst $ filter (\((_,_,r),b) -> b && (not (isPhi r)) ) $
+                              [ ((r,l,simp $ deriv r l), snd $ deriv2 r l) | r <- rs, l <- sig ]
+
+
+            -- record ambiguous transition A3
+            new_ambig3 = map fst $ filter (\((_,_,r),b) -> b && (not (isPhi r))) $
+                            [ ((r,l,simp (deriv r l)), simpAmbig (deriv r l)) | r <- rs, l <- sig ]
+
+
+            new_fstx = FSTX { start = start fstx,
+                              final = (final fstx) ++ filter nullable new_rs,
+                              states = (states fstx) ++ new_rs,
+                              transitions = (transitions fstx) ++ new_ts,
+                              ambig1 = nub $ ambig1 fstx ++ new_ambig1,
+                              ambig2 = nub $ ambig2 fstx ++ new_ambig2,
+                              ambig3 = nub $ ambig3 fstx ++ new_ambig3 }
+
+        in if length new_rs == 0
+           then new_fstx
+           else go (rs ++ new_rs, new_fstx) new_rs 
+
+  in let fstx = FSTX { start = r,
+                       final = if nullable r then [r] else [],
+                       states = [r],
+                       transitions = [],
+                       ambig1 = [],
+                       ambig2 = [],
+                       ambig3 = [] }
+     in go ([r],fstx) [r]
+
+
+-- testing corner
 
 -- (a* a*)*
 r11 = Star (Seq (Star (L 'a') Greedy) (Star (L 'a') Greedy)) Greedy
