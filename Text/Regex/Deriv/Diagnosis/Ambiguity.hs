@@ -1,11 +1,12 @@
 {-# LANGUAGE GADTs #-} 
-module Text.Regex.Deriv.Ambiguity.Diagnosis where
+module Text.Regex.Deriv.Diagnosis.Ambiguity where
 
 import Text.Regex.Deriv.RE
 import Text.Regex.Deriv.Common
 import Text.Regex.Deriv.Pretty
 import Data.List 
 import Data.Char
+import Data.Maybe 
 import qualified Data.Map as M
 -- Parse tree representation
 data U where
@@ -152,9 +153,6 @@ simpStep (Choice rs gf)  =
       (r3, f3)        = flat r2 
       (r4, f4, b4)    = (fixs3 nubChoice) r3
   in (r4, f1 .:. f2 .:. f3 .:. f4, b1 || b4) 
-      -- (rs3, f3, b3)   = nubs rs1
-      -- (r4, f4, b4)    = (simpDist simpStep) r3
-  -- in (r4, f1 .:. f2 .:. f3 .:. f4, b1 || b3 || b4) -- todo
 simpStep (Seq r1 r2)      = 
   let (r1',f1, b1) = simpStep r1 
       (r2',f2, b2) = simpStep r2
@@ -187,6 +185,8 @@ rmAltPhi (Choice (r:rs) gf) =
   let (fs,rs') = unzip (rmAltPhiN 0 (r:rs))
       g = \u -> case u of { AltU n v -> [(fs !! n) u] }
   in (Choice rs' gf, g)
+rmAltPhi r = (r, \u -> [u]) -- todo check why ex1 need this ?
+-- rmAltPhi r = error ("impossible rmAltPhi case:" ++ (pretty r))
 
 rmAltPhiN :: Int -- ^ num pos to shift to the right == num of phi found so far
              -> [RE] -> [(U -> U, RE)]
@@ -324,16 +324,16 @@ mkCons n | n <=0 = AltU 0
 
 -- | Build a Finite State Transducer from a RE
 
-data FSTX = FSTX { start :: RE,
-                   final :: [RE],
-                   states :: [RE],
-                   transitions :: [(RE,Char,RE,U->[U])],
-                   ambig1 :: [RE],
-                   ambig2 :: [(RE,Char,RE)],
-                   ambig3 :: [(RE,Char,RE)] }
+data FSX = FSX { start :: RE,
+                 final :: [RE],
+                 states :: [RE],
+                 transitions :: [(RE,Char,RE,U->[U])],
+                 ambig1 :: [RE],
+                 ambig2 :: [(RE,Char,RE)],
+                 ambig3 :: [(RE,Char,RE)] }
 
-buildFSTX :: RE -> FSTX
-buildFSTX r = 
+buildFSX :: RE -> FSX
+buildFSX r = 
   let sig = sigmaRE r
       
       -- building the possible transitions given a re and a char
@@ -344,8 +344,8 @@ buildFSTX r =
         in [(r, l, r'', \u -> nub $ concat [ injDs r d l u' | u' <- fSimp u ]) | not (isPhi r'')]
            
       -- main iteration
-      go :: ([RE], FSTX) -> [RE] -> FSTX
-      go (rs, fstx) curr_rs = 
+      go :: ([RE], FSX) -> [RE] -> FSX
+      go (rs, fsx) curr_rs = 
         let new_ts = concat $ map (\(l,r) -> mkTransitions r l)
                          [ (l,r) | r <- curr_rs, 
                                    l <- sig ]
@@ -356,6 +356,7 @@ buildFSTX r =
             -- record ambiguous state A1
             new_ambig1 = filter (\r -> testAmbigCase1 r) rs
 
+            
             -- record ambiguous transition A2
             new_ambig2 = map fst $ filter (\((_,_,r),b) -> b && (not (isPhi r)) ) $
                               [ ((r,l,simp $ deriv r l), snd $ deriv2 r l) | r <- rs, l <- sig ]
@@ -364,28 +365,94 @@ buildFSTX r =
             -- record ambiguous transition A3
             new_ambig3 = map fst $ filter (\((_,_,r),b) -> b && (not (isPhi r))) $
                             [ ((r,l,simp (deriv r l)), simpAmbig (deriv r l)) | r <- rs, l <- sig ]
+            
+            {-
 
+            -- optimization
+            dfs  = [ deriv2 r l | r <- rs, l <- sig]
+            new_ambig2 = map fst $ filter (\((_,_,r),b) -> b && (not (isPhi r)) ) $
+                              [ ((r,l,simp $ fst df), snd df) | df <- dfs ] 
 
-            new_fstx = FSTX { start = start fstx,
-                              final = (final fstx) ++ filter nullable new_rs,
-                              states = (states fstx) ++ new_rs,
-                              transitions = (transitions fstx) ++ new_ts,
-                              ambig1 = nub $ ambig1 fstx ++ new_ambig1,
-                              ambig2 = nub $ ambig2 fstx ++ new_ambig2,
-                              ambig3 = nub $ ambig3 fstx ++ new_ambig3 }
+            new_ambig3 = map fst $ filter (\((_,_,r),b) -> b && (not (isPhi r))) $
+                            [ ((r,l,simp $ fst df), simpAmbig $ fst df ) | df <- dfs ]
+            -}
+
+            new_fsx = FSX { start = start fsx,
+                            final = (final fsx) ++ filter nullable new_rs,
+                            states = (states fsx) ++ new_rs,
+                            transitions = (transitions fsx) ++ new_ts,
+                            ambig1 = nub $ ambig1 fsx ++ new_ambig1,
+                            ambig2 = nub $ ambig2 fsx ++ new_ambig2,
+                            ambig3 = nub $ ambig3 fsx ++ new_ambig3 }
 
         in if length new_rs == 0
-           then new_fstx
-           else go (rs ++ new_rs, new_fstx) new_rs 
+           then new_fsx
+           else go (rs ++ new_rs, new_fsx) new_rs 
 
-  in let fstx = FSTX { start = r,
-                       final = if nullable r then [r] else [],
-                       states = [r],
-                       transitions = [],
-                       ambig1 = [],
-                       ambig2 = [],
-                       ambig3 = [] }
-     in go ([r],fstx) [r]
+  in let fsx = FSX { start = r,
+                     final = if nullable r then [r] else [],
+                     states = [r],
+                     transitions = [],
+                     ambig1 = [],
+                     ambig2 = [],
+                     ambig3 = [] }
+     in go ([r],fsx) [r]
+
+
+
+-- | Build fsx graph as dot file, including mapping of numerical state names to underlying expressions (descendants)
+buildGraph r =
+  let fsx = buildFSX r
+      st = zip (states fsx) [1..]
+      state r = show $ fromJust $ lookup r $ zip (states fsx) [1..]
+
+      dottedA23 t 
+        | elem t (ambig2 fsx ++ ambig3 fsx) = " style = dotted"
+        | otherwise                         = ""
+
+      fillcolorA1 s
+        | elem s (ambig1 fsx) = " style = filled fillcolor = grey" 
+        | otherwise           = ""
+
+      kind s
+        | elem s (ambig2 fsx) && elem s (ambig3 fsx) = "|2-3"
+        | elem s (ambig2 fsx)                        = "|2"
+        | elem s (ambig3 fsx)                        = "|3"
+        | otherwise                                  = ""
+
+
+      dot = unlines $ [ "digraph G {"
+                      ]
+                      ++
+                      [ "rankdir = LR;"]   -- left to right
+                      ++
+                      [ state r1 ++ " -> " ++ state r2
+                                           ++ "[label=" ++ "\"" ++ [c] ++ kind (r1,c,r2) ++ "\"" ++ " " ++ dottedA23 (r1,c,r2) ++ "];"
+                        | (r1,c,r2,_) <- transitions fsx
+                      ]
+                      ++
+                      [
+                         " 0 -> " ++ state (start fsx) ++ ";"
+                       , " 0 [shape = point];"  
+                      ]
+                      ++
+                      [ state r ++ "[shape = circle " ++ fillcolorA1 r ++ " ];"
+                        | r <- states fsx, not (nullable r)
+                      ]
+                      ++
+                      [ state r ++ "[shape = doublecircle " ++ fillcolorA1 r ++ " ];"
+                        | r <- states fsx, nullable r
+                      ]
+                      ++
+                      [
+                        "}"
+                      ]
+
+  in (dot, zip (states fsx) [1..])
+
+
+
+
 
 
 -- testing corner
@@ -527,6 +594,39 @@ genV (Choice rs _) = AltU 0 (genV (head rs))
 genV (Star r _) = List [ genV r ]
 
 
-simpDist :: ( RE -> (RE, U -> [U], Bool))  ->  RE -> (RE, U -> [U], Bool)
-simpDist = undefined
-  
+
+
+-- Examples
+---------------------------
+
+-- (a a* + b a + a b a)* b
+ex1 = Seq (Star (Choice [Seq (L 'a') (Star (L 'a') Greedy), 
+                         (Choice [Seq (L 'b') (L 'a'),
+                                 Seq (L 'a') (Seq (L 'b') (L 'a'))] Greedy)] Greedy) Greedy)
+          (L 'b')
+
+
+{-
+*Text.Regex.Deriv.Ambiguity.Diagnosis> putStrLn $ fst $ buildGraph ex1
+digraph G {
+rankdir = LR;
+1 -> 2[label="a" ];
+1 -> 3[label="b" ];
+2 -> 4[label="a" ];
+2 -> 3[label="b|3"  style = dotted];
+3 -> 1[label="a" ];
+4 -> 4[label="a|2-3"  style = dotted];
+4 -> 3[label="b|2-3"  style = dotted];
+ 0 -> 1;
+ 0 [shape = point];
+1[shape = circle  ];
+2[shape = circle  ];
+4[shape = circle  ];
+3[shape = doublecircle  ];
+}
+
+
+equivalent to the one found on in the paper prototype DerivAmbigDialKL.hs. 
+State 5 was merged with state 1 because we apply Eps . r = r similarity rule
+-}
+
