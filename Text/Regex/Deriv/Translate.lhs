@@ -215,7 +215,7 @@ getters and putters
 >     case epat of
 >       -- () ~>_p ()
 >     { EEmpty ->
->       do { return ( PE [Empty] )
+>       do { return ( PE [Eps] )
 >          }
 >       {-
 >         e ~> p
@@ -272,7 +272,7 @@ getters and putters
 >       do { p <- trans e
 >          ; let g | b = Greedy
 >                  | otherwise = NotGreedy
->          ; return (PChoice [p,PE [Empty]] g)
+>          ; return (PChoice [p,PE [Eps]] g)
 >          }
 >     ; EPlus e b ->
 >       {- 
@@ -311,18 +311,18 @@ getters and putters
 >                  | otherwise = NotGreedy
 >                r1s = take low $ repeat r
 >                r1 = case r1s of 
->                     { [] -> Empty
+>                     { [] -> Eps
 >                     ; (r':rs') -> foldl (\ rs r -> Seq rs r) r' rs'
 >                     }
->                r2s = take (high - low) $ repeat (Choice [r,Empty] g)
+>                r2s = take (high - low) $ repeat (Choice [r,Eps] g)
 >                r2 = case r2s of
->                     { [] -> Empty
+>                     { [] -> Eps
 >                     ; (r':rs') -> foldl (\ rs r -> Seq rs r) r' rs'
 >                     }
 >                r3 = case (r1,r2) of 
->                       (Empty, Empty) -> Empty
->                       (Empty, _    ) -> r2
->                       (_    , Empty) -> r1
+>                       (Eps, Eps) -> Eps
+>                       (Eps, _    ) -> r2
+>                       (_    , Eps) -> r1
 >                       (_    , _    ) -> Seq r1 r2
 >                p = PVar i [] (PE [r3])
 >          ; return p
@@ -341,7 +341,7 @@ getters and putters
 >                  | otherwise = NotGreedy
 >                r1s = take low $ repeat r
 >                r1 = case r1s of 
->                     { [] -> Empty
+>                     { [] -> Eps
 >                     ; (r':rs') -> foldl (\ rs r -> Seq rs r) r' rs'
 >                     }
 >                r2 = Seq r1 (Star r g)
@@ -361,7 +361,7 @@ getters and putters
 >                    }
 >            else do { setAnchorStart -- the first carat
 >                    ; i <- getIncNGI
->                    ; let r = Empty
+>                    ; let r = Eps
 >                          p = PVar i [] (PE [r])
 >                    ; return p
 >                    }
@@ -374,7 +374,7 @@ getters and putters
 >            then return ()
 >            else setAnchorEnd
 >          ; i <- getIncNGI
->          ; let r = Empty
+>          ; let r = Eps
 >                p = PVar i [] (PE [r])
 >          ; return p
 >          }
@@ -443,7 +443,7 @@ e ~>_r r
 >       {-
 >         () ~>_r ()
 >        -}
->       return Empty
+>       return Eps
 >     ; EGroup e ->
 >       {- we might not need this rule
 >          e ~> r
@@ -478,7 +478,7 @@ e ~>_r r
 >        -}
 >       do { rs <- mapM r_trans es
 >          ; case rs of
->            { [] -> return Empty
+>            { [] -> return Eps
 >            ; (r:rs) -> return (foldl (\ xs x -> Seq xs x) r rs)
 >            }
 >          }
@@ -491,7 +491,7 @@ e ~>_r r
 >       do { r <- r_trans e
 >          ; let g | b = Greedy
 >                  | otherwise = NotGreedy
->          ; return (Choice [r,Empty] g)
+>          ; return (Choice [r,Eps] g)
 >          }
 >     ; EPlus e b -> 
 >       {-
@@ -529,18 +529,18 @@ e ~>_r r
 >                  | otherwise = NotGreedy
 >                r1s = take low $ repeat r
 >                r1 = case r1s of
->                     { [] -> Empty
+>                     { [] -> Eps
 >                     ; (r':rs') -> foldl (\ rs r -> Seq rs r) r' rs'
 >                     }
->                r2s = take (high - low) $ repeat (Choice [r,Empty] g)
+>                r2s = take (high - low) $ repeat (Choice [r,Eps] g)
 >                r2 = case r2s of
->                     { [] -> Empty
+>                     { [] -> Eps
 >                     ; (r':rs') -> foldl (\ rs r -> Seq rs r) r' rs'
 >                     }
 >                r3 = case (r1,r2) of
->                       (Empty, Empty) -> Empty
->                       (Empty, _    ) -> r2
->                       (_    , Empty) -> r1
+>                       (Eps, Eps) -> Eps
+>                       (Eps, _    ) -> r2
+>                       (_    , Eps) -> r1
 >                       (_    , _    ) -> Seq r1 r2
 >          ; return r3
 >          }
@@ -557,7 +557,7 @@ e ~>_r r
 >                  | otherwise = NotGreedy
 >                r1s = take low $ repeat r
 >                r1 = case r1s of 
->                     { [] -> Empty
+>                     { [] -> Eps
 >                     ; (r':rs') -> foldl (\ rs r -> Seq rs r) r' rs'
 >                     }
 >                r2 = Seq r1 (Star r g)
@@ -571,7 +571,7 @@ e ~>_r r
 >          ; if f 
 >            then return (L '^') -- not the first carat
 >            else do { setAnchorStart -- the first carat
->                    ; return Empty
+>                    ; return Eps
 >                    }
 >          }
 >     ; EDollar -> 
@@ -581,7 +581,7 @@ e ~>_r r
 >          ; if f
 >            then return ()
 >            else setAnchorEnd
->          ; return Empty
+>          ; return Eps
 >          }
 >     ; EDot -> 
 >         --  . ~>_r \Sigma

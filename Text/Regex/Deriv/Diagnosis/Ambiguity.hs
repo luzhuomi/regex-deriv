@@ -1,13 +1,17 @@
 {-# LANGUAGE GADTs #-} 
 module Text.Regex.Deriv.Diagnosis.Ambiguity where
 
-import Text.Regex.Deriv.RE
-import Text.Regex.Deriv.Common
-import Text.Regex.Deriv.Pretty
 import Data.List 
 import Data.Char
 import Data.Maybe 
 import qualified Data.Map as M
+
+import Text.Regex.Deriv.RE
+import Text.Regex.Deriv.Common
+import Text.Regex.Deriv.Pretty
+import Text.Regex.Deriv.IntPattern (strip)
+import Text.Regex.Deriv.Parse
+
 -- Parse tree representation
 data U where
   Nil :: U
@@ -399,6 +403,17 @@ buildFSX r =
      in go ([r],fsx) [r]
 
 
+minCounterEx :: FSX -> [U] 
+minCounterEx fsx = 
+  let findNextTrans :: RE -> [(RE, Char, RE, U->[U])]
+      findNextTrans r = filter (\(s,c,t,f) -> s == r) (transitions fsx)
+      
+      -- go :: [(RE,String)] -> ...
+      go curr_states_prefices = 
+        let nextTrans = concatMap (\(r,prefix) -> findNextTrans r) curr_states_prefices 
+        in undefined   
+  in undefined
+            
 
 -- | Build fsx graph as dot file, including mapping of numerical state names to underlying expressions (descendants)
 buildGraph r =
@@ -452,7 +467,14 @@ buildGraph r =
 
 
 
-
+diagnose :: String -> Maybe U
+diagnose src = case parsePatPosix src of
+  { Left err -> Nothing
+  ; Right (pat,_) -> 
+       let r = strip(pat)
+           fsx = buildFSX r
+       in Nothing
+  }
 
 
 -- testing corner
@@ -605,7 +627,6 @@ ex1 = Seq (Star (Choice [Seq (L 'a') (Star (L 'a') Greedy),
                                  Seq (L 'a') (Seq (L 'b') (L 'a'))] Greedy)] Greedy) Greedy)
           (L 'b')
 
-
 {-
 *Text.Regex.Deriv.Ambiguity.Diagnosis> putStrLn $ fst $ buildGraph ex1
 digraph G {
@@ -630,3 +651,8 @@ equivalent to the one found on in the paper prototype DerivAmbigDialKL.hs.
 State 5 was merged with state 1 because we apply Eps . r = r similarity rule
 -}
 
+
+-- same as ex1
+ex1' = Seq (Star (Choice [Seq (L 'a') (Star (L 'a') Greedy), Seq (L 'b') (L 'a'),
+                                 Seq (L 'a') (Seq (L 'b') (L 'a'))] Greedy) Greedy)
+          (L 'b')

@@ -33,7 +33,8 @@ library
                          Text.Regex.Deriv.Translate
                          Text.Regex.Deriv.Pretty
                          Text.Regex.Deriv.Dictionary
-                         Text.Regex.Deriv.Ambiguity.Diagnosis
+                         Text.Regex.Deriv.Diagnosis.Ambiguity
+                         Text.Regex.Deriv.Diagnosis.Universality
   Buildable:              True
   Extensions:             GADTs, MultiParamTypeClasses, FunctionalDependencies, FlexibleInstances, TypeSynonymInstances, FlexibleContexts
   GHC-Options:            -threaded -O2 -funbox-strict-fields

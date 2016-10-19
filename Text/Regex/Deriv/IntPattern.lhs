@@ -13,7 +13,7 @@
 
 > import Data.List
 > import qualified Data.IntMap as IM
-> import Text.Regex.Deriv.Common (Range(..), range, minRange, maxRange, Letter, PosEpsilon(..), IsEpsilon(..), IsPhi(..), GFlag(..), IsGreedy(..), Simplifiable(..) )
+> import Text.Regex.Deriv.Common (Range(..), range, minRange, maxRange, Letter, PosEps(..), IsEps(..), IsPhi(..), GFlag(..), IsGreedy(..), Simplifiable(..) )
 > import Text.Regex.Deriv.RE
 > import Text.Regex.Deriv.Dictionary (Key(..), primeL, primeR)
 > import Text.Regex.Deriv.Pretty
@@ -109,9 +109,9 @@
 > mkEmpPat :: Pat -> Pat
 > mkEmpPat (PVar x w p) = PVar x w (mkEmpPat p)
 > mkEmpPat (PE rs) 
->   | any posEpsilon rs = PE [Empty]
+>   | any posEps rs = PE [Eps]
 >   | otherwise = PE [Phi]
-> mkEmpPat (PStar p g) = PE [Empty] -- problematic?! we are losing binding (x,()) from  ( x : a*) ~> PE <>
+> mkEmpPat (PStar p g) = PE [Eps] -- problematic?! we are losing binding (x,()) from  ( x : a*) ~> PE <>
 > mkEmpPat (PPlus p1 p2) = mkEmpPat p1 -- since p2 must be pstar we drop it. If we mkEmpPat p2, we need to deal with pdPat (PPlus (x :<>) (PE <>)) l
 > mkEmpPat (PPair p1 p2) = PPair (mkEmpPat p1) (mkEmpPat p2)
 > mkEmpPat (PChoice ps g) = PChoice (map mkEmpPat ps) g
@@ -306,9 +306,9 @@
 >     simplify (PPair p1 p2) =
 >         let p1' = simplify p1
 >             p2' = simplify p2
->         in if isEpsilon p1'
+>         in if isEps p1'
 >            then p2'
->            else if isEpsilon p2'
+>            else if isEps p2'
 >                 then p1'
 >                 else PPair p1' p2'
 >     simplify (PChoice ps g) =
@@ -319,14 +319,14 @@
 >     simplify (PE r) = PE (map simplify r)
 
 
-> instance IsEpsilon Pat where
->    isEpsilon (PVar _ _ p) = isEpsilon p
->    isEpsilon (PE rs) = all isEpsilon rs                                                        
->    isEpsilon (PPair p1 p2) =  (isEpsilon p1) && (isEpsilon p2)
->    isEpsilon (PChoice ps _) =  all isEpsilon ps
->    isEpsilon (PStar p _) = isEpsilon p
->    isEpsilon (PPlus p1 p2) = isEpsilon p1 && isEpsilon p2
->    isEpsilon (PEmpty _) = True
+> instance IsEps Pat where
+>    isEps (PVar _ _ p) = isEps p
+>    isEps (PE rs) = all isEps rs                                                        
+>    isEps (PPair p1 p2) =  (isEps p1) && (isEps p2)
+>    isEps (PChoice ps _) =  all isEps ps
+>    isEps (PStar p _) = isEps p
+>    isEps (PPlus p1 p2) = isEps p1 && isEps p2
+>    isEps (PEmpty _) = True
                                                         
 
 > instance IsPhi Pat where
