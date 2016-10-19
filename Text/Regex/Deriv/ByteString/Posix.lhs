@@ -43,9 +43,9 @@ We do not break part the sub-pattern of the original reg, they are always groupe
 
 
 > import Text.Regex.Deriv.RE 
-> import Text.Regex.Deriv.Common (IsPhi(..), IsEpsilon(..))
+> import Text.Regex.Deriv.Common (IsPhi(..), IsEps(..))
 > import Text.Regex.Deriv.Pretty (Pretty(..))
-> import Text.Regex.Deriv.Common (Range(..), Letter, PosEpsilon(..), my_hash, my_lookup, GFlag(..), IsGreedy(..), preBinder, subBinder, mainBinder)
+> import Text.Regex.Deriv.Common (Range(..), Letter, PosEps(..), my_hash, my_lookup, GFlag(..), IsGreedy(..), preBinder, subBinder, mainBinder)
 > -- import Text.Regex.Deriv.IntPattern (Pat(..), toBinder, Binder(..), strip, listifyBinder, Key(..))
 > import Text.Regex.Deriv.IntPattern (Pat(..), toBinder, Binder(..), strip, listifyBinder)
 > import Text.Regex.Deriv.Parse
@@ -183,7 +183,7 @@ The shapes of the input/output Pat and SBinder should be identical.
 >                                                  SPair sb' sb cf} ) ) 
 >       }
 > dPat0 (PPair !p1 !p2) l 
->    | (posEpsilon (strip p1)) =
+>    | (posEps (strip p1)) =
 >       let pf1 = dPat0C p1 l                           
 >           pf2 = dPat0C p2 l
 >       in case (pf1, pf2) of
@@ -454,7 +454,7 @@ unsafe cache
 >    hashWithSalt salt NotGreedy = Ha.hashWithSalt salt (23::Int)
 
 > instance Ha.Hashable RE where
->    hashWithSalt salt Empty = Ha.hashWithSalt salt (29::Int)
+>    hashWithSalt salt Eps = Ha.hashWithSalt salt (29::Int)
 >    hashWithSalt salt (L x) = Ha.hashWithSalt salt (Ha.hashWithSalt 31 (Ha.hash x))
 >    hashWithSalt salt (Choice rs g) = Ha.hashWithSalt salt (Ha.hashWithSalt 37 (Ha.hashWithSalt (Ha.hash g) rs))
 >    hashWithSalt salt (Seq r1 r2) = Ha.hashWithSalt salt (Ha.hashWithSalt 41 (Ha.hashWithSalt (Ha.hash r1) r2))
@@ -607,7 +607,7 @@ invariance: input / outoput of Int -> SBinder -> SBinder agree with simp's Pat i
 >    ; (!p2',!f2') <- simpC p2
 >    ; case (p1',p2') of       
 >      { _ | isPhi p1' || isPhi p2' -> mzero
->          | isEpsilon p1'          -> 
+>          | isEps p1'          -> 
 >              let !rm = extract p1
 >                  f !i !sb = {-# SCC "simp/f1" #-} case sb of
 >                     { SPair !sb1 !sb2 !cf -> let cf' = {-# SCC "simp/f1/rm" #-} rm sb1 
@@ -615,7 +615,7 @@ invariance: input / outoput of Int -> SBinder -> SBinder agree with simp's Pat i
 >                                                  sb2' = {-# SCC "simp/f1/f2'" #-}sb2 `seq` f2' i sb2
 >                                              in {-# SCC "simp/f1/in" #-} cf'' `seq` sb2' `seq` carryForward cf'' sb2' }
 >              in return (p2',f)
->          | isEpsilon p2'          ->
+>          | isEps p2'          ->
 >              let !rm = extract p2
 >                  f !i !sb = {-# SCC "simp/f2" #-} case sb of 
 >                     { SPair !sb1 !sb2 !cf -> let cf' = rm sb2 
@@ -687,9 +687,9 @@ extract a carry forward from the sbinder
 
 > extract :: Pat -> SBinder -> CarryForward
 > extract (PVar !x w !p) (SVar (_,!b) !sb !cf)
->      | posEpsilon (strip p) = let cf' = extract p sb
->                                   cf'' = cf' `seq` insertCF (x,b) cf'
->                               in  cf'' `seq` (cf'' `combineCF` cf)
+>      | posEps (strip p) = let cf' = extract p sb
+>                               cf'' = cf' `seq` insertCF (x,b) cf'
+>                           in  cf'' `seq` (cf'' `combineCF` cf)
 >      | otherwise = IM.empty -- cf?
 > extract (PE rs) (SRE !cf) = cf
 > extract (PStar p g) (SStar !cf) = cf
@@ -751,7 +751,7 @@ get all envs from the sbinder
 > sbinderToEnv' :: Pat -> SBinder -> [CarryForward]
 > sbinderToEnv' _ (SChoice [] _) = []
 > sbinderToEnv' (PChoice (p:ps) g) (SChoice (sb:sbs) cf) 
->   | posEpsilon (strip p) = 
+>   | posEps (strip p) = 
 >   do { cf' <- sbinderToEnv' p sb
 >      ; cf `seq` cf' `seq` return (combineCF cf cf') }
 >   | otherwise = sbinderToEnv' (PChoice ps g) (SChoice sbs cf)
@@ -760,7 +760,7 @@ get all envs from the sbinder
 >      ; cf2 <- sbinderToEnv' p2 sb2
 >      ; cf1 `seq` cf2 `seq` cf `seq` return (combineCFs [cf1,cf2,cf]) }
 > sbinderToEnv' (PVar x _ p) (SVar sr sb cf) 
->   | posEpsilon (strip p) = do { cf' <- sbinderToEnv' p sb
+>   | posEps (strip p) = do { cf' <- sbinderToEnv' p sb
 >                               ; let cf'' = cf' `seq` sr `seq` insertCF sr cf'
 >                               ; cf `seq` cf'' `seq` return (cf `combineCF` cf'') }
 >   | otherwise = []
@@ -784,7 +784,7 @@ get all envs from the sbinder
 >       (delta, mapping) = {-# SCC "buildDfaTable/builder" #-}  builder sig [] init_dict 0 [p] -- 0 is already used by p
 >       delta' = delta
 >       table = {-# SCC "buildDfaTable/table" #-} IM.fromList (map (\ (s,c,d,f,sb2env) -> (my_hash s c, (d,f,sb2env))) delta')
->       finals = [] -- final is not needed, see the Arg below  --  map snd (filter (\(p,i) -> posEpsilon $! strip p) ( M.toList mapping))
+>       finals = [] -- final is not needed, see the Arg below  --  map snd (filter (\(p,i) -> posEps $! strip p) ( M.toList mapping))
 >   in (table, toSBinder p, sbinderToEnv p, finals)
 
 testing 
@@ -905,7 +905,7 @@ x0 :: ( x1 :: (  x2 :: (x3:: a | x4 :: ab) | x5 :: b)* )
 >    where p1 = PVar 1 [] p2
 >          p2 = PVar 2 [] (PPair p3 (PPair (PE [(L 'X')]) (PPair pn3 (PPair (PE [(L 'Y')]) p4))))
 >          p3 = PVar 3 [] (PE [Star (Choice [L 'X', L 'Y'] Greedy) Greedy])
->          pn3 = PVar (-3) [] (PE [ Seq (Choice [(Choice [Choice [L 'X', L 'Y'] Greedy, Empty] Greedy)] Greedy) (Choice [(Choice [(Choice [Choice [L 'X', L 'Y'] Greedy, Empty] Greedy), Empty] Greedy)] Greedy)])
+>          pn3 = PVar (-3) [] (PE [ Seq (Choice [(Choice [Choice [L 'X', L 'Y'] Greedy, Eps] Greedy)] Greedy) (Choice [(Choice [(Choice [Choice [L 'X', L 'Y'] Greedy, Eps] Greedy), Eps] Greedy)] Greedy)])
 >          p4 = PVar 4 [] (PE [Star (Choice [L 'X', L 'Y'] Greedy) Greedy])
 
 > -- | The Deriv backend spepcific 'Regex' type

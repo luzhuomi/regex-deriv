@@ -23,6 +23,7 @@ module Text.Regex.Deriv.ByteString.BitCode
        , regexec
        ) where 
 
+--  not working because of DQ.length as changed 
 import Prelude hiding (Word)
 import System.IO.Unsafe
 import Data.IORef
@@ -46,9 +47,9 @@ import Text.Regex.Base(RegexOptions(..),RegexLike(..),MatchArray)
 
 
 import Text.Regex.Deriv.RE 
-import Text.Regex.Deriv.Common (IsPhi(..), IsEpsilon(..))
+import Text.Regex.Deriv.Common (IsPhi(..), IsEps(..))
 import Text.Regex.Deriv.Pretty (Pretty(..))
-import Text.Regex.Deriv.Common (Range(..), Letter, PosEpsilon(..), my_hash, my_lookup, GFlag(..), IsGreedy(..), preBinder, subBinder, mainBinder)
+import Text.Regex.Deriv.Common (Range(..), Letter, PosEps(..), my_hash, my_lookup, GFlag(..), IsGreedy(..), preBinder, subBinder, mainBinder)
 -- import Text.Regex.Deriv.IntPattern (Pat(..), toBinder, Binder(..), strip, listifyBinder, Key(..))
 import Text.Regex.Deriv.IntPattern (Pat(..), toBinder, Binder(..), strip, listifyBinder)
 import Text.Regex.Deriv.Parse
@@ -140,7 +141,7 @@ data SPath = SChoice Path [SPath]
 
 -- build empty SPath from a RE
 mkSPath :: RE -> SPath 
-mkSPath Empty = SEps emptyP
+mkSPath Eps = SEps emptyP
 mkSPath (L c) = SL emptyP
 mkSPath Any = SL emptyP
 mkSPath (Choice [r1,r2] _) = SChoice emptyP [mkSPath r1, mkSPath r2]
@@ -151,7 +152,7 @@ mkSPath Phi = SPhi
 mkSPath r = error ("mkSPath fail" ++ show r)
 
 mkEmpty :: RE -> SPath -> Path 
-mkEmpty Empty = (\x -> case x of { (SEps p) -> p })
+mkEmpty Eps = (\x -> case x of { (SEps p) -> p })
 mkEmpty (Choice [r1,r2] _ ) 
   | nullable r1 = let f = mkEmpty r1   
                   in (\(SChoice p [sp1,sp2]) -> p `appP` (consP zero (f sp1)))
@@ -187,13 +188,13 @@ fuse b (SStar p sp) = let !bp = b `appP` p in SStar bp sp
 fuse b SPhi = SPhi
 fuse b p = error $ "fuse error: b=" ++ (show b)  ++ " p=" ++ show p
 
-nullable = posEpsilon
+nullable = posEps
   
 deriv :: RE -> Char -> (RE, SPath -> SPath)
 deriv Phi l = (Phi, \_ -> SPhi)
-deriv Empty l = (Phi, \_ -> SPhi)
+deriv Eps l = (Phi, \_ -> SPhi)
 deriv (L l') l
-  | l == l'  = (Empty, \(SL p) -> (SEps p))
+  | l == l'  = (Eps, \(SL p) -> (SEps p))
   | otherwise = (Phi, \_ -> SPhi)
 deriv (Choice [r1,r2] gf) l = let (r1',!f1) = deriv r1 l
                                   (r2',!f2) = deriv r2 l
@@ -231,12 +232,12 @@ deriv (Star r gf) l = let (r', f) = deriv r l
                                  let !sp' = f sp
                                      !p' = (p `appP` zeroP)
                                   in SPair p' sp' $! (SStar emptyP sp)) -- todo check
-deriv Any _ = (Empty, \(SL p) -> (SEps p))                   
+deriv Any _ = (Eps, \(SL p) -> (SEps p))                   
 deriv r l = error ("deriv failed: " ++ (show r) ++ "/" ++ (show l))
                       
                       
 simp :: RE -> (RE, SPath -> SPath)                      
-simp (Seq Empty r)
+simp (Seq Eps r)
   | isPhi r = (Phi, \sp ->SPhi)
   | otherwise = (r, \(SPair !p1 (SEps !p2) !sp2) -> 
                   let !p12 = p1 `appP` p2
@@ -289,7 +290,7 @@ simp (ChoiceInt [r1,r2])
                                          let !sp1' = f1 sp1
                                              !sp2' = f2 sp2
                                          in SChoice p [sp1', sp2'])
-simp (Star Empty gf) = (Empty, \(SStar !p1 (SEps !p2)) -> 
+simp (Star Eps gf) = (Eps, \(SStar !p1 (SEps !p2)) -> 
                          let !p =  (p1 `appP` p2 `appP` oneP)
                          in SEps p) -- how likely this will be applied when p1 and p2 are non-empty paths?
 -- r** ==> r*
@@ -298,7 +299,7 @@ simp (Star Empty gf) = (Empty, \(SStar !p1 (SEps !p2)) ->
 -- That is, the outer Kleene star performs a single iteration
 -- I'm quite sure we can do without this optimization.
 -- simp (Star (Star r gf2) gf1) = (Star r gf1, \(SStar p1 (SStar p2 sp)) -> SStar (p1 `appP` p2) sp)
-simp (Star r gf) | isPhi r = (Empty, \(SStar !p !sp) -> let !p' = (p `appP` oneP) in  SEps p' )
+simp (Star r gf) | isPhi r = (Eps, \(SStar !p !sp) -> let !p' = (p `appP` oneP) in  SEps p' )
                  | otherwise = let (r', !f) = simp r
                                in r' `seq` (Star r' gf, \(SStar !p !sp) -> let !sp' = f sp in SStar p sp')
 simp (Choice [r] gf) = let (r',!f) = simp r                               
@@ -418,7 +419,7 @@ instance Ha.Hashable GFlag where
   hashWithSalt salt NotGreedy = Ha.hashWithSalt salt (23::Int)
 
 instance Ha.Hashable RE where
-  hashWithSalt salt Empty = Ha.hashWithSalt salt (29::Int)
+  hashWithSalt salt Eps = Ha.hashWithSalt salt (29::Int)
   hashWithSalt salt (L x) = Ha.hashWithSalt salt (Ha.hashWithSalt 31 (Ha.hash x))
   hashWithSalt salt (Choice rs g) = Ha.hashWithSalt salt (Ha.hashWithSalt 37 (Ha.hashWithSalt (Ha.hash g) rs))
   hashWithSalt salt (Seq r1 r2) = Ha.hashWithSalt salt (Ha.hashWithSalt 41 (Ha.hashWithSalt (Ha.hash r1) r2))
@@ -499,7 +500,7 @@ match2 [(r,sp)] [] = [(r,sp)]
 
 
 retrieveEmpty :: RE -> SPath -> Path
-retrieveEmpty Empty (SEps p) = p
+retrieveEmpty Eps (SEps p) = p
 retrieveEmpty (Choice [r1,r2] gf) (SChoice p [sp1, sp2]) 
   | nullable r1 = p `appP` (consP zero (retrieveEmpty r1 sp1))
   | nullable r2 = p `appP` (consP one (retrieveEmpty r2 sp2))
@@ -510,12 +511,12 @@ retrieveEmpty (ChoiceInt [r1,r2]) (SChoice p [sp1, sp2])
   | nullable r2 = p `appP` (retrieveEmpty r2 sp2)
 retrieveEmpty (Seq r1 r2) (SPair p sp1 sp2)  = p `appP` (retrieveEmpty r1 sp1) `appP` (retrieveEmpty r2 sp2)
 retrieveEmpty (Star r gf) (SStar p sp) = p `appP` oneP
-retrieveEmpty r sr = error ("retrieveEmpty failed:" ++ show (posEpsilon r) ++ (show r) ++ (show sr))
+retrieveEmpty r sr = error ("retrieveEmpty failed:" ++ show (posEps r) ++ (show r) ++ (show sr))
 
 
 decode2 :: RE -> Path -> (U, Path)
 decode2 Phi bs = (Nil,bs)
-decode2 Empty bs = (EmptyU,bs)
+decode2 Eps bs = (EmptyU,bs)
 decode2 (L l) bs = (Letter l, bs)
 decode2 sr@(Choice [r1,r2] gf) bs' = 
   case unconsP bs' of 
@@ -555,7 +556,7 @@ extract p'@(PStar p _) r'@(Star r _) (List (u:us)) = extract p' r' (List us) -- 
 extract (PPair p1 p2) (Seq r1 r2) (Pair (u1,u2)) = extract p1 r1 u1 ++ extract p2 r2 u2
 extract (PChoice [p1,p2] _) (Choice [r1,r2] _) (LeftU u)  = extract p1 r1 u
 extract (PChoice [p1,p2] _) (Choice [r1,r2] _) (RightU u) = extract p2 r2 u
-extract (PEmpty p) Empty _ = [] -- not in used
+extract (PEmpty p) Eps _ = [] -- not in used
 
 
 extractSR :: Pat -> RE -> U -> Int -> ([(Int, Range)], Int)
@@ -574,7 +575,7 @@ extractSR (PPair p1 p2) (Seq r1 r2) (Pair (u1,u2)) start_index =
   in (l1 ++ l2, i2)
 extractSR (PChoice [p1,p2] _) (Choice [r1,r2] _) (LeftU u) start_index = extractSR p1 r1 u start_index
 extractSR (PChoice [p1,p2] _) (Choice [r1,r2] _) (RightU u) start_index = extractSR p2 r2 u start_index
-extractSR (PEmpty p) Empty _ start_index = ([],start_index) -- not in used
+extractSR (PEmpty p) Eps _ start_index = ([],start_index) -- not in used
 extractSR (PChoice [p] _) (Choice [r] _) u start_index = extractSR p r u start_index
 extractSR p r u _ = error ("etractSR failed:" ++ (show p) ++ show r ++ show u)
 
@@ -610,7 +611,7 @@ class NormChoice a where
   
   
 instance NormChoice RE where  
-  normChoice Empty = Empty
+  normChoice Eps = Eps
   normChoice (L c) = L c
   normChoice (Seq r1 r2) = Seq (normChoice r1) (normChoice r2)
   normChoice (Star r gf) = Star (normChoice r) gf
@@ -675,20 +676,20 @@ p3 = PVar 0 [] (PStar ( PVar 1 [] ( PChoice [(PVar 2 [] (PChoice [p3,p4] Greedy)
         p5 = PVar 5 [] (PE [(L 'B')])
         
 
-p0 = PVar 0 [] (PChoice [PPair (PE [Empty]) (PPair (PStar (PVar 1 [] (PChoice [PPair (PVar 2 [] (PChoice [PPair (PVar 3 [] (PE [Choice [L 'A',Seq (L 'A') (L 'B')] Greedy ])) (PVar 4 [] (PE [Choice [Seq (Seq (L 'B') (L 'A')) (L 'A'),L 'A'] Greedy ]))] Greedy)) (PVar 5 [] (PE [Choice [Seq (L 'A') (L 'C'),L 'C'] Greedy]))] Greedy)) Greedy ) (PE [Empty]))] Greedy)
+p0 = PVar 0 [] (PChoice [PPair (PE [Eps]) (PPair (PStar (PVar 1 [] (PChoice [PPair (PVar 2 [] (PChoice [PPair (PVar 3 [] (PE [Choice [L 'A',Seq (L 'A') (L 'B')] Greedy ])) (PVar 4 [] (PE [Choice [Seq (Seq (L 'B') (L 'A')) (L 'A'),L 'A'] Greedy ]))] Greedy)) (PVar 5 [] (PE [Choice [Seq (L 'A') (L 'C'),L 'C'] Greedy]))] Greedy)) Greedy ) (PE [Eps]))] Greedy)
 
-p1 = PVar 0 [] (PChoice [PPair (PE [Empty]) (PPair 
-
-                                              (PVar 1 [] (PChoice [PPair (PVar 2 [] (PChoice [PPair (PVar 3 [] (PE [Choice [L 'A',Seq (L 'A') (L 'B')] Greedy ])) (PVar 4 [] (PE [Choice [Seq (Seq (L 'B') (L 'A')) (L 'A'),L 'A'] Greedy ]))] Greedy)) (PVar 5 [] (PE [Choice [Seq (L 'A') (L 'C'),L 'C'] Greedy]))] Greedy)) 
-                                             
-                                             (PE [Empty]))] Greedy)
-
-
-p2 = PVar 0 [] (PPair (PE [Empty]) (PPair 
+p1 = PVar 0 [] (PChoice [PPair (PE [Eps]) (PPair 
 
                                               (PVar 1 [] (PChoice [PPair (PVar 2 [] (PChoice [PPair (PVar 3 [] (PE [Choice [L 'A',Seq (L 'A') (L 'B')] Greedy ])) (PVar 4 [] (PE [Choice [Seq (Seq (L 'B') (L 'A')) (L 'A'),L 'A'] Greedy ]))] Greedy)) (PVar 5 [] (PE [Choice [Seq (L 'A') (L 'C'),L 'C'] Greedy]))] Greedy)) 
                                              
-                                             (PE [Empty])) )
+                                             (PE [Eps]))] Greedy)
+
+
+p2 = PVar 0 [] (PPair (PE [Eps]) (PPair 
+
+                                              (PVar 1 [] (PChoice [PPair (PVar 2 [] (PChoice [PPair (PVar 3 [] (PE [Choice [L 'A',Seq (L 'A') (L 'B')] Greedy ])) (PVar 4 [] (PE [Choice [Seq (Seq (L 'B') (L 'A')) (L 'A'),L 'A'] Greedy ]))] Greedy)) (PVar 5 [] (PE [Choice [Seq (L 'A') (L 'C'),L 'C'] Greedy]))] Greedy)) 
+                                             
+                                             (PE [Eps])) )
 
 q2 = PVar 0 [] 
      (PVar 1 [] (PChoice [PPair (PVar 2 [] (PChoice [PPair (PVar 3 [] (PE [Choice [L 'A',Seq (L 'A') (L 'B')] Greedy ])) (PVar 4 [] (PE [Choice [Seq (Seq (L 'B') (L 'A')) (L 'A'),L 'A'] Greedy ]))] Greedy)) (PVar 5 [] (PE [Choice [Seq (L 'A') (L 'C'),L 'C'] Greedy]))] Greedy)) 
@@ -810,3 +811,4 @@ r2 = Seq (choice [L 'A', Empty]) (choice [Empty, L 'A']) -}
   
   
 -- A?A?  
+
