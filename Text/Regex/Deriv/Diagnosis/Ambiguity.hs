@@ -77,6 +77,8 @@ mkEmptyUs :: RE -> [U]
 mkEmptyUs Phi            = []
 mkEmptyUs Eps            = [EmptyU]
 mkEmptyUs (L l)          = []
+mkEmptyUs Any            = []
+mkEmptyUs (Not _)        = []
 mkEmptyUs (Choice rs _) =
   let idxed_rs = zip [0..] rs
   in [ AltU idx u | (idx, r) <- idxed_rs, u <- mkEmptyUs r, nullable r]
@@ -103,7 +105,11 @@ injDs (Choice (r:rs) gf) (Choice (rd:rds) gf') l (AltU n u) =
 injDs (L l') Eps l EmptyU 
   | l == l' = [Letter l]
   | otherwise = error "impossible"
-injDs r1 r2 l u = error $ (pretty r1) ++ " --> " ++ (pretty r2) ++ (show u)
+injDs Any Eps l EmptyU = [Letter l]
+injDs (Not cs) Eps l EmptyU 
+  | not (l `elem` cs) = [Letter l]
+  | otherwise = error "impossible"
+-- injDs r1 r2 l u = error $ (pretty r1) ++ " --> " ++ (pretty r2) ++ (show u)
 
 testAmbigCase1 r = nullable r && (length $ mkEmptyUs r) > 1
 
@@ -524,13 +530,13 @@ findMinCounterEx fsx =
 
 
 
-diagnose :: String -> Maybe U
+diagnose :: String -> [U]
 diagnose src = case parsePatPosix src of
-  { Left err -> Nothing
+  { Left err -> []
   ; Right (pat,_) -> 
        let r = strip(pat)
            fsx = buildFSX r
-       in Nothing
+       in findMinCounterEx fsx
   }
 
 
