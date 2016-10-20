@@ -403,17 +403,62 @@ buildFSX r =
      in go ([r],fsx) [r]
 
 
-minCounterEx :: FSX -> [U] 
+data AmbigTrans = A1 (RE,Char,RE, U->[U], [(RE,Char,U->[U])]) -- ^ current state, next label, next state(ambig), inj, prefices with state * label * injs
+                | A2 (RE,Char,RE, U->[U], [(RE,Char,U->[U])])
+                | A3 (RE,Char,RE, U->[U], [(RE,Char,U->[U])])
+                  
+instance Show AmbigTrans where
+  show (A1 (r,c,t,_,s)) = "A1 " ++ show (r,c,t)
+  show (A2 (r,c,t,_,s)) = "A2 " ++ show (r,c,t)  
+  show (A3 (r,c,t,_,s)) = "A3 " ++ show (r,c,t)
+                         
+
+minCounterEx :: FSX -> [U]
 minCounterEx fsx = 
   let findNextTrans :: RE -> [(RE, Char, RE, U->[U])]
       findNextTrans r = filter (\(s,c,t,f) -> s == r) (transitions fsx)
       
-      -- go :: [(RE,String)] -> ...
-      go curr_states_prefices = 
-        let nextTrans = concatMap (\(r,prefix) -> findNextTrans r) curr_states_prefices 
-        in undefined   
-  in undefined
-            
+      nub123 :: [(RE,Char,RE, U->[U], [(RE,Char,U->[U])])] -> [(RE,Char,RE, U->[U], [(RE,Char,U->[U])])]
+      nub123 = nubBy (\(r1,c1,t1,_,_) (r2,c2,t2,_,_) -> r1 == r2 && c1 == c2 && t1 == t2)
+
+      goUntilAmbig :: [(RE,[(RE,Char,U->[U])])] -> [(RE, Char, RE)] -> Maybe AmbigTrans
+      goUntilAmbig curr_states_prefices trans_sofar = 
+        let next_trans_prefices = 
+              filter (\(s,l,t,f,p) -> not $ (s,l,t) `elem` trans_sofar) $
+              nub123 ( concatMap (\(r,prefix) -> 
+                                map (\(s,l,t,f) -> (s,l,t,f,prefix)) $ findNextTrans r
+                              ) curr_states_prefices )
+            ambigs1 = filter (\(s,l,t,f,_) -> t `elem` (ambig1 fsx))       next_trans_prefices
+            ambigs2 = filter (\(s,l,t,f,_) -> (s,l,t) `elem` (ambig2 fsx)) next_trans_prefices
+            ambigs3 = filter (\(s,l,t,f,_) -> (s,l,t) `elem` (ambig3 fsx)) next_trans_prefices
+        in if null next_trans_prefices 
+           then Nothing
+           else case (ambigs1,ambigs2,ambigs3) of 
+             { ((trans:_), _, _)   -> Just $ A1 trans
+             ; ([], (trans:_), _)  -> Just $ A2 trans
+             ; ([], [], (trans:_)) -> Just $ A3 trans
+             ; ([], [], [])        -> -- no ambig found so far
+               let next_states_prefices = map (\(r,l,t,f,p) -> (t,p++[(r,l,f)])) next_trans_prefices
+               in goUntilAmbig next_states_prefices (trans_sofar ++ (map (\(s,l,t,_,_) -> (s,l,t)) next_trans_prefices))
+             }
+  in case (goUntilAmbig [(start fsx, [])] []) of 
+    { Nothing -> [] 
+    ; Just (A1 (r,l,t,f,pf)) -> 
+      let ut = genV t
+          urs = f ut
+          (s,us) = foldl (\(t,us) (r,l,f) -> (r, concat [ f u | u <- us ])) (r,urs) pf
+      in us
+    ; Just (A2 (r,l,t,f,pf)) -> 
+      let ut = genV t
+          urs = f ut
+          (s,us) = foldl (\(t,us) (r,l,f) -> (r, concat [ f u | u <- us ])) (r,urs) pf
+      in us
+    ; Just (A3 (r,l,t,f,pf)) -> 
+      let ut = genV t
+          urs = f ut
+          (s,us) = foldl (\(t,us) (r,l,f) -> (r, concat [ f u | u <- us ])) (r,urs) pf
+      in us
+    }
 
 -- | Build fsx graph as dot file, including mapping of numerical state names to underlying expressions (descendants)
 buildGraph r =
@@ -613,7 +658,7 @@ genV Any   = Letter 'a'
 genV (Not cs) = Letter $ head (filter (\c -> not (c `elem` cs)) (map chr [0..255]))
 genV (Seq r1 r2) = Pair (genV r1, genV r2)
 genV (Choice rs _) = AltU 0 (genV (head rs))
-genV (Star r _) = List [ genV r ]
+genV (Star r _) = List []
 
 
 
