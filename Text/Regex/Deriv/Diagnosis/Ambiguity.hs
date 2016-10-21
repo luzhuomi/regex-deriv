@@ -1,5 +1,11 @@
 {-# LANGUAGE GADTs #-} 
-module Text.Regex.Deriv.Diagnosis.Ambiguity where
+module Text.Regex.Deriv.Diagnosis.Ambiguity 
+       ( re2dot
+       , diagnoseU
+       , diagnose
+       , deriv
+       , simp
+       ) where
 
 import Data.List 
 import Data.Char
@@ -528,16 +534,31 @@ findMinCounterEx fsx =
       in us
     }
 
-
-
-diagnose :: String -> [U]
-diagnose src = case parsePatPosix src of
-  { Left err -> []
-  ; Right (pat,_) -> 
-       let r = strip(pat)
+diagnoseU :: String -> Either String [U]
+diagnoseU src = case parsePat src of
+  { Left err -> Left $ "Unable to parse regex '" ++ src ++ "'. Error: " ++ show err
+  ; Right pat -> 
+       let r   = strip(pat)
            fsx = buildFSX r
-       in findMinCounterEx fsx
+       in Right $ findMinCounterEx fsx
   }
+
+diagnose :: String -> Either String [String]
+diagnose src = case diagnoseU src of 
+  { Left err -> Left src
+  ; Right us -> Right $ map flatU us
+  }
+               
+re2dot :: String -> FilePath -> IO ()
+re2dot src fp =  case parsePat src of
+  { Left err -> return ()
+  ; Right pat -> 
+       let r     = strip(pat)
+           (g,_) = buildGraph r
+       in do 
+         { appendFile fp g }
+  }
+  
 
 
 -- testing corner
