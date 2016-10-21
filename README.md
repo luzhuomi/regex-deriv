@@ -58,15 +58,11 @@ Prelude> import Text.Regex.Deriv.Diagnosis.Ambiguity
 Prelude Text.Regex.Deriv.Diagnosis.Ambiguity> diagnose "^((aa*)|(ba)|(aba))*b$"
 Right ["abab","abab"]
 Prelude Text.Regex.Deriv.Diagnosis.Ambiguity> diagnoseU "^((aa*)|(ba)|(aba))*b$"
-Right
-[AltU 0 (Pair (AltU 0 EmptyU,Pair (List [AltU 2 (AltU 0 (AltU 0 (Pair (Pair (Letter 'a',Letter 'b'),Letter 'a'))))],Pair 
-(AltU 0 (Letter 'b'),AltU 0 EmptyU)))),AltU 0 (Pair (AltU 0
-EmptyU,Pair (List
-[AltU 0 (AltU 0 (AltU 0 (Pair (Letter 'a',List [])))),AltU 1 (AltU 0
-(AltU 0 (Pair (Letter 'b',Letter 'a'))))],Pair (AltU 0 (Letter 'b'),AltU 0 EmptyU))))]
+Right [AltU 0 (Pair (AltU 0 EmptyU,Pair (List [AltU 2 (AltU 0 (AltU 0 (Pair (Pair (Letter 'a',Letter 'b'),Letter 'a'))))],Pair (AltU 0 (Letter 'b'),AltU 0 EmptyU)))),AltU 0 (Pair (AltU 0 EmptyU,Pair (List [AltU 0 (AltU 0 (AltU 0 (Pair (Letter 'a',List [])))),AltU 1 (AltU 0 (AltU 0 (Pair (Letter 'b',Letter 'a'))))],Pair (AltU 0 (Letter 'b'),AltU 0 EmptyU))))] 
 Prelude Text.Regex.Deriv.Diagnosis.Ambiguity> re2dot "^((aa*)|(ba)|(aba))*b$" "/tmp/out.dot"
 Prelude Text.Regex.Deriv.Diagnosis.Ambiguity> :q
 Leaving GHCi.
 
 $ dot -Tpng /tmp/out.dot  > out.png
 ```
+![out.png](output/out.png)
