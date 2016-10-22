@@ -65,8 +65,6 @@ When the input regex is unambiguous, an empty list is returned.
 ```haskell
 $ ghci
 Prelude> import Text.Regex.Deriv.Diagnosis.Ambiguity
-Prelude Text.Regex.Deriv.Diagnosis.Ambiguity> diagnose "^aa*a*$"
-Right ["aa"]
 Prelude Text.Regex.Deriv.Diagnosis.Ambiguity> diagnose "^aa*$"
 Right []
 Prelude Text.Regex.Deriv.Diagnosis.Ambiguity> :q
