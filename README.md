@@ -48,8 +48,33 @@ main = do
 ```
 ambiguity check
 =============
-Note that ^r$ is desugar to \epsilon r \epsilon during parsing
+The main idea of the ambiguity check is described in
+[Derivative-Based Diagnosis of Regular Expression Ambiguity CIAA'16](http://www.home.hs-karlsruhe.de/~suma0002/publications/DerivativesDiagnosisRegExAmbiguity.pdf).
 
+When the input regex is ambiguous, at least (one) minimal counter
+example will be returned.
+```haskell
+$ ghci
+Prelude> import Text.Regex.Deriv.Diagnosis.Ambiguity
+Prelude Text.Regex.Deriv.Diagnosis.Ambiguity> diagnose "^aa*a*$"
+Right ["aa"]
+Prelude Text.Regex.Deriv.Diagnosis.Ambiguity> :q
+Leaving GHCi.
+```
+When the input regex is unambiguous, an empty list is returned.
+```haskell
+$ ghci
+Prelude> import Text.Regex.Deriv.Diagnosis.Ambiguity
+Prelude Text.Regex.Deriv.Diagnosis.Ambiguity> diagnose "^aa*a*$"
+Right ["aa"]
+Prelude Text.Regex.Deriv.Diagnosis.Ambiguity> diagnose "^aa*$"
+Right []
+Prelude Text.Regex.Deriv.Diagnosis.Ambiguity> :q
+Leaving GHCi.
+```
+
+Note that ^r$ is desugar to \epsilon r \epsilon during parsing.
+A more complex example found in the paper.  
 ```haskell
 
 $ ghci
