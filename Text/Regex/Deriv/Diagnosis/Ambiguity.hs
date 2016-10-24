@@ -453,6 +453,11 @@ buildGraph r =
         | elem s (ambig3 fsx)                        = "|3"
         | otherwise                                  = ""
 
+      escape s@(['\\']) = ['\\'] ++ s
+      escape s@(['"']) = ['\\'] ++ s
+      escape s@([']']) = ['\\'] ++ s
+      escape s@(['[']) = ['\\'] ++ s
+      escape s = s                          
 
       dot = unlines $ [ "digraph G {"
                       ]
@@ -460,7 +465,7 @@ buildGraph r =
                       [ "rankdir = LR;"]   -- left to right
                       ++
                       [ state r1 ++ " -> " ++ state r2
-                                           ++ "[label=" ++ "\"" ++ [c] ++ kind (r1,c,r2) ++ "\"" ++ " " ++ dottedA23 (r1,c,r2) ++ "];"
+                                           ++ "[label=" ++ "\"" ++ escape [c] ++ kind (r1,c,r2) ++ "\"" ++ " " ++ dottedA23 (r1,c,r2) ++ "];"
                         | (r1,c,r2,_) <- transitions fsx
                       ]
                       ++
@@ -563,7 +568,7 @@ re2dot src fp =  case parsePat src of
        let r     = strip(pat)
            (g,_) = buildGraph r
        in do 
-         { appendFile fp g }
+         { writeFile fp g }
   }
   
 
