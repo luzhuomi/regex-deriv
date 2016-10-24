@@ -18,6 +18,7 @@ import Text.Regex.Deriv.Common
 import Text.Regex.Deriv.Pretty
 import Text.Regex.Deriv.IntPattern (strip)
 import Text.Regex.Deriv.Parse
+import System.IO.Unsafe (unsafePerformIO)
 
 -- Parse tree representation
 data U where
@@ -183,7 +184,8 @@ simpStep (Seq r1 r2)      =
   let (r1',f1, b1) = simpStep r1 
       (r2',f2, b2) = simpStep r2
       f = \u -> case u of 
-        { Pair (u1,u2) -> [ Pair (u1',u2') | u1' <- f1 u1, u2' <- f2 u2] }
+        { Pair (u1,u2) -> [ Pair (u1',u2') | u1' <- f1 u1, u2' <- f2 u2] 
+        ; u -> error $ "simpStep " ++ (show (Seq r1 r2)) ++ " " ++ show u }
   in (Seq r1' r2', f, b1 || b2)
 simpStep r = (r, \u ->[u], False)     
 
@@ -357,6 +359,14 @@ data FSX = FSX { start :: RE,
                  ambig1 :: [RE],
                  ambig2 :: [(RE,Char,RE)],
                  ambig3 :: [(RE,Char,RE)] }
+
+instance Show FSX where
+  show fsx = unlines [ "start: " ++ (show $ start fsx)
+                     , "final: " ++ (show $ final fsx)
+                     , "states:" ++ (show $ states fsx)
+                     , "ambig1:" ++ (show $ ambig1 fsx)
+                     , "ambig2:" ++ (show $ ambig2 fsx)
+                     , "ambig3:" ++ (show $ ambig3 fsx) ]
 
 buildFSX :: RE -> FSX
 buildFSX r = 
@@ -546,7 +556,8 @@ diagnoseU src = case parsePat src of
   ; Right pat -> 
        let r   = strip(pat)
            fsx = buildFSX r
-       in Right $ findMinCounterEx fsx
+           io = unsafePerformIO $ print fsx
+       in {- io `seq` -} Right $ findMinCounterEx fsx
   }
 
 diagnose :: String -> Either String [String]
@@ -760,4 +771,11 @@ ex1' = Seq (Star (Choice [Seq (L 'a') (Star (L 'a') Greedy), Seq (L 'b') (L 'a')
 *Text.Regex.Deriv.Diagnosis.Ambiguity> findMinCounterEx fsx
 
 
+
+
+
+bug
+diagnose "^([a-zA-Z0-9_\\.\\-])+\\@(([a-zA-Z0-9\\-])+\\.)+([a-zA-Z0-9]{2,4})+$"
+diagnose  "^([A-B_\\.\\-])+\\@(([A-B_\\-])+\\.)+([A-B]{2,4})+$"
+Right *** Exception: simpStep Seq (Star (Choice [Choice [Choice [L '-',L '.',L 'A',L 'B',L '_'] ] ] ) ) (Seq (L '@') (Seq (Seq (Seq (Seq (Choice [L '-',L 'A',L 'B',L '_'] ) (Star (Choice [Choice [Choice [L '-',L 'A',L 'B',L '_'] ] ] ) )) (L '.')) (Star (Choice [Seq (Seq (Choice [Choice [Choice [L '-',L 'A',L 'B',L '_'] ] ] ) (Star (Choice [Choice [Choice [L '-',L 'A',L 'B',L '_'] ] ] ) )) (Choice [L '.'] )] ) )) (Seq (Seq (Seq (Seq (Choice [L 'A',L 'B'] ) (Choice [L 'A',L 'B'] )) (Seq (Choice [L 'A',L 'B',Eps] ) (Choice [L 'A',L 'B',Eps] ))) (Star (Choice [Choice [Seq (Seq (Choice [L 'A',L 'B'] ) (Choice [L 'A',L 'B'] )) (Seq (Choice [Choice [L 'A',L 'B'] ,Eps] ) (Choice [Choice [L 'A',L 'B'] ,Eps] ))] ] ) )) Eps))) AltU 0 (Pair (Pair (Pair (List [AltU 0 (AltU 0 (AltU 1 (Letter 'A')))],Letter '.'),List []),Pair (Pair (Pair (Pair (AltU 0 (Letter 'A'),AltU 0 (Letter 'A')),Pair (AltU 0 (Letter 'A'),AltU 0 (Letter 'A'))),List []),EmptyU)))
 -}

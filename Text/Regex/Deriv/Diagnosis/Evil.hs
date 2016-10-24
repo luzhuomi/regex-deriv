@@ -39,3 +39,13 @@ evil sigma r = -- todo: optimization needed, deriv(r') should be a subset of der
                    nrds = nrdDerivs sigma r
                in  (r' `elem` nrds) && all (\t -> not $ universal ascii t ) allR''
              }
+
+diagnose :: String -> Either String Bool
+diagnose src = case parsePat src of
+  { Left err -> Left $ "Unable to parse regex '" ++ src ++ "'. Error: " ++ show err
+  ; Right pat -> 
+       let r   = strip(pat)
+       in Right $ evil ascii r
+  }
+               
+-- diagnose "^([a-zA-Z0-9_\\.\\-])+\\@(([a-zA-Z0-9\\-])+\\.)+([a-zA-Z0-9]{2,4})+$"               
