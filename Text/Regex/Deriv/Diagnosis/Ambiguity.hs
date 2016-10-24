@@ -3,6 +3,7 @@ module Text.Regex.Deriv.Diagnosis.Ambiguity
        ( re2dot
        , diagnoseU
        , diagnose
+       , diagnoseRE
        , deriv
        , simp
        ) where
@@ -549,6 +550,12 @@ diagnose src = case diagnoseU src of
   ; Right us -> Right $ map flatU us
   }
                
+diagnoseRE :: RE -> [U]
+diagnoseRE r = 
+  let fsx = buildFSX r
+  in findMinCounterEx fsx
+
+
 re2dot :: String -> FilePath -> IO ()
 re2dot src fp =  case parsePat src of
   { Left err -> return ()

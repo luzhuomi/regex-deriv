@@ -1,8 +1,8 @@
 module Text.Regex.Deriv.Diagnosis.Universality where
 
 -- Universality test
--- Let deriv(sigma*)(r) denotes all derivative descandants of r
--- We say r is universal iff for all t \in deriv(sigma*), () \in t
+-- Let deriv+(sigma*)(r) denotes all non-direct derivative descandants of r
+-- We say r is universal iff for all t \in deriv+(sigma*), () \in t
 
 import Data.List 
 import Data.Char
@@ -29,8 +29,8 @@ allDerivs sigma r = go [] [r]
           in go (nub (sofar ++ rs)) rs'
              
 
-univeral :: [Char] -> RE -> Bool 
-univeral sigma r = all posEps (allDerivs sigma r)
+universal :: [Char] -> RE -> Bool 
+universal sigma r = all posEps (allDerivs sigma r)
           
                    
 ascii :: [Char]                    
