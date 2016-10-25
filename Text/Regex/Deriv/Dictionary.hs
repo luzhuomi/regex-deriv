@@ -7,27 +7,27 @@ import qualified Data.IntMap as IM
 import Data.Char
 
 class Key a where
-    hash :: a -> [Int]
+  hash :: a -> [Int]
 
 
 instance Key Int where
-    hash i = [i]
+  hash i = [i]
 
 instance Key Char where
-    hash c = [(ord c)]
+  hash c = [(ord c)]
 
 instance (Key a, Key b) => Key (a,b) where
-    hash (a,b) = hash a ++ hash b
+  hash (a,b) = hash a ++ hash b
 
 instance (Key a, Key b, Key c) => Key (a,b,c) where
-    hash (a,b,c) = hash a ++ hash b ++ hash c
+  hash (a,b,c) = hash a ++ hash b ++ hash c
 
 
 instance Key a => Key [a] where
-    hash as = concatMap hash as
+  hash as = concatMap hash as
 
 
--- an immutable dictionary
+  -- an immutable dictionary
 newtype Dictionary a = Dictionary (Trie a)
 
 primeL :: Int
@@ -57,16 +57,16 @@ lookup key (Dictionary trie) =
     let key_hash = hash key
     in key_hash `seq` 
        case lookupTrie key_hash trie of
-        Just (Trie (x:_) _) -> Just x
-	_		    -> Nothing
+       Just (Trie (x:_) _) -> Just x
+       _                   -> Nothing
 
 lookupAll :: Key k => k -> Dictionary a -> [a]
 lookupAll key (Dictionary trie) = 
     let key_hash = hash key
     in key_hash `seq` 
        case lookupTrie key_hash trie of
-        Just (Trie xs _) -> xs
-	_		 -> [] 
+            Just (Trie xs _) -> xs
+            _                -> [] 
 
 member :: Key k => k -> Dictionary a -> Bool
 member key d =
@@ -124,16 +124,16 @@ insertTrie overwrite [] i (Trie is maps)
     | overwrite  =  Trie [i] maps
     | otherwise  =  Trie (i:is) maps
 insertTrie overwrite (word:words) i (Trie is maps) = 
-    let key = word
-    in key `seq` case IM.lookup key maps of 
-	 { Just trie -> let trie' = insertTrie overwrite words i trie
-			    maps' = trie' `seq` IM.update (\x -> Just trie') key maps
-			in maps' `seq` Trie is maps'
-	 ; Nothing -> let trie = emptyTrie
-			  trie' = insertTrie overwrite words i trie
-			  maps' = trie' `seq` IM.insert key trie' maps
-		      in maps' `seq` Trie is maps'
-	 }
+  let key = word
+  in key `seq` case IM.lookup key maps of 
+  { Just trie -> let trie' = insertTrie overwrite words i trie
+                     maps' = trie' `seq` IM.update (\x -> Just trie') key maps
+                 in maps' `seq` Trie is maps'
+  ; Nothing -> let trie = emptyTrie
+                   trie' = insertTrie overwrite words i trie
+                   maps' = trie' `seq` IM.insert key trie' maps
+               in maps' `seq` Trie is maps'
+  }
 
 
 
@@ -143,8 +143,8 @@ lookupTrie [] trie = Just trie
 lookupTrie (word:words) (Trie is maps) = 
     let key = word
     in case IM.lookup key maps of
-	   Just trie -> lookupTrie words trie
-	   Nothing   -> Nothing
+    Just trie -> lookupTrie words trie
+    Nothing   -> Nothing
 
 -- we only update the first one, not the collided ones
 updateTrie :: [Int] -> a -> Trie a -> Trie a
@@ -152,10 +152,10 @@ updateTrie [] y (Trie (x:xs) maps) = Trie (y:xs) maps
 updateTrie (word:words) v  (Trie is maps) =
     let key = word
     in case IM.lookup key maps of
-	   Just trie -> let trie' = updateTrie words v trie
-			    maps'  = IM.update (\x -> Just trie') key maps
-			in Trie is maps'
-	   Nothing   -> Trie is maps
+      Just trie -> let trie' = updateTrie words v trie
+                       maps'  = IM.update (\x -> Just trie') key maps
+                   in Trie is maps'
+      Nothing   -> Trie is maps
 
 
 

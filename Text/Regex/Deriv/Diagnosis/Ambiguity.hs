@@ -528,7 +528,7 @@ findMinCounterEx fsx =
              ; ([], (trans:_), _)  -> Just $ A2 trans
              ; ([], [], (trans:_)) -> Just $ A3 trans
              ; ([], [], [])        -> -- no ambig found so far
-               let next_states_prefices = map (\(r,l,t,f,p) -> (t,p++[(r,l,f)])) next_trans_prefices
+               let next_states_prefices = map (\(r,l,t,f,p) -> (t,(r,l,f):p)) next_trans_prefices -- prefices are stored in reversed order
                in goUntilAmbig next_states_prefices (trans_sofar ++ (map (\(s,l,t,_,_) -> (s,l,t)) next_trans_prefices))
              }
   in case (goUntilAmbig [(start fsx, [])] []) of 
@@ -546,7 +546,8 @@ findMinCounterEx fsx =
     ; Just (A3 (r,l,t,f,pf)) -> 
       let ut = genV t
           urs = f ut
-          (s,us) = foldl (\(t,us) (r,l,f) -> (r, concat [ f u | u <- us ])) (r,urs) pf
+          (s,us) = foldl (\(t,us) (r,l,f) -> 
+                           (r, concat [ f u | u <- us ])) (r,urs) pf
       in us
     }
 
