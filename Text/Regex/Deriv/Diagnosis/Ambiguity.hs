@@ -777,5 +777,15 @@ ex1' = Seq (Star (Choice [Seq (L 'a') (Star (L 'a') Greedy), Seq (L 'b') (L 'a')
 bug
 diagnose "^([a-zA-Z0-9_\\.\\-])+\\@(([a-zA-Z0-9\\-])+\\.)+([a-zA-Z0-9]{2,4})+$"
 diagnose  "^([A-B_\\.\\-])+\\@(([A-B_\\-])+\\.)+([A-B]{2,4})+$"
-Right *** Exception: simpStep Seq (Star (Choice [Choice [Choice [L '-',L '.',L 'A',L 'B',L '_'] ] ] ) ) (Seq (L '@') (Seq (Seq (Seq (Seq (Choice [L '-',L 'A',L 'B',L '_'] ) (Star (Choice [Choice [Choice [L '-',L 'A',L 'B',L '_'] ] ] ) )) (L '.')) (Star (Choice [Seq (Seq (Choice [Choice [Choice [L '-',L 'A',L 'B',L '_'] ] ] ) (Star (Choice [Choice [Choice [L '-',L 'A',L 'B',L '_'] ] ] ) )) (Choice [L '.'] )] ) )) (Seq (Seq (Seq (Seq (Choice [L 'A',L 'B'] ) (Choice [L 'A',L 'B'] )) (Seq (Choice [L 'A',L 'B',Eps] ) (Choice [L 'A',L 'B',Eps] ))) (Star (Choice [Choice [Seq (Seq (Choice [L 'A',L 'B'] ) (Choice [L 'A',L 'B'] )) (Seq (Choice [Choice [L 'A',L 'B'] ,Eps] ) (Choice [Choice [L 'A',L 'B'] ,Eps] ))] ] ) )) Eps))) AltU 0 (Pair (Pair (Pair (List [AltU 0 (AltU 0 (AltU 1 (Letter 'A')))],Letter '.'),List []),Pair (Pair (Pair (Pair (AltU 0 (Letter 'A'),AltU 0 (Letter 'A')),Pair (AltU 0 (Letter 'A'),AltU 0 (Letter 'A'))),List []),EmptyU)))
+diagnose  "^(A)+\\@((A)+\\.)+(A{2,4})+$"
+
+
+diagnose  "^A+A+$"
+Right *** Exception: 
+simpStep Seq (Star (L 'A') ) (Seq (L 'A') (Star (L 'A') )) 
+
+AltU 0 (Pair (List [Letter 'A'],Pair (Letter 'A',List [])))
+
 -}
+
+e9 = Seq (Seq (L 'a') (Star (L 'a') Greedy)) (Seq (L 'a') (Star (L 'a') Greedy))
