@@ -394,14 +394,19 @@ buildFSX r =
 
             
             -- record ambiguous transition A2
+            {-
             new_ambig2 = map fst $ filter (\((_,_,r),b) -> b && (not (isPhi r)) ) $
-                              [ ((r,l,simp $ deriv r l), snd $ deriv2 r l) | r <- rs, l <- sig ]
-
+                              [ ((r,l,simp $ deriv r l), snd $ deriv2 r l) | r <- rs, l <- sig] -}
+            new_ambig2 = map fst $ filter (\((_,_,r),b) -> b && (not (isPhi r)) ) $
+                              [ ((r,l,rs), bd) | r <- rs, l <- sig, let (rd,bd) = deriv2 r l, let (rs,fs,bs) = simp3 rd ] 
 
             -- record ambiguous transition A3
+            {-
             new_ambig3 = map fst $ filter (\((_,_,r),b) -> b && (not (isPhi r))) $
                             [ ((r,l,simp (deriv r l)), simpAmbig (deriv r l)) | r <- rs, l <- sig ]
-            
+-}
+            new_ambig3 = map fst $ filter (\((_,_,r),b) -> b && (not (isPhi r))) $
+                            [ ((r,l,rs), bs) | r <- rs, l <- sig, let (rd,bd) = deriv2 r l, let (rs,fs,bs) = simp3 rd ]
             {-
 
             -- optimization
@@ -556,9 +561,9 @@ diagnoseU src = case parsePat src of
   { Left err -> Left $ "Unable to parse regex '" ++ src ++ "'. Error: " ++ show err
   ; Right pat -> 
        let r   = strip(pat)
-           fsx = buildFSX r
+           fsx = {-# SCC "buildFSX" #-} buildFSX r
            io = unsafePerformIO $ print fsx
-       in {- io `seq` -} Right $ findMinCounterEx fsx
+       in {- io `seq` -} Right $ {-# SCC "findMinCounterEx" #-} findMinCounterEx fsx
   }
 
 diagnose :: String -> Either String [String]
