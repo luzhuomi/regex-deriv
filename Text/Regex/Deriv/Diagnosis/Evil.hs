@@ -19,9 +19,10 @@ import Text.Regex.Deriv.Common
 import Text.Regex.Deriv.Pretty
 import Text.Regex.Deriv.IntPattern (strip)
 import Text.Regex.Deriv.Parse
-import Text.Regex.Deriv.Diagnosis.Ambiguity (deriv,simp,diagnoseRE)
+import Text.Regex.Deriv.Diagnosis.Ambiguity (deriv,simp,diagnoseRE,flatU)
 import Text.Regex.Deriv.Diagnosis.Universality (allDerivs, universal, ascii)
 
+{-
 
 nrdDerivs :: [Char] -> RE -> [RE] 
 nrdDerivs sigma r = 
@@ -49,3 +50,48 @@ diagnose src = case parsePat src of
   }
                
 -- diagnose "^([a-zA-Z0-9_\\.\\-])+\\@(([a-zA-Z0-9\\-])+\\.)+([a-zA-Z0-9]{2,4})+$"               
+-}
+
+-- Evil test
+-- Let pderiv(sigma*)(r) denotes all partial derivative descandants of r (why partial derivatives? (a+b+ab)*c + sigma*
+-- We say r is evil iff there exists r' in pderiv(sigma*)(r) such that
+--   1) r' is ambigous and 
+--   2) r' has an ambiguous prefix p where r' --p--> r'
+--   3) r' is not universal
+
+
+pderiv = partDeriv
+
+allPDerivs :: [Char] -> RE -> [RE]
+allPDerivs sigma r = go [] [r] 
+  where go :: [RE] -> [RE] -> [RE]
+        go sofar [] = sofar
+        go sofar rs = 
+          let rs' = nub $ filter (\r -> not (r `elem` sofar)) $ 
+                    (concatMap (\r -> concat [ map simp $ pderiv r l | l <- sigma ]) rs)
+          in go (nub (sofar ++ rs)) rs'
+        
+        
+evil :: [Char] -> RE -> Bool
+evil sigma r = -- todo: optimization needed, deriv(r') should be a subset of deriv(r)
+  let allR' = allPDerivs sigma r
+  in any ambig_loop (filter (not . (universal sigma)) allR')
+    where ambig_loop :: RE -> Bool 
+          ambig_loop r' = case diagnoseRE r' of
+            { [] -> False
+            ; counter_exs -> any (\ex -> is_a_loop_prefix r' (flatU ex)) counter_exs
+            }
+          is_a_loop_prefix :: RE -> [Char] -> Bool
+          is_a_loop_prefix r p = 
+            let d = foldl (\x l -> simp $ deriv x l) r p -- follow the prefix
+                    -- check whether r is a descendant of d
+            in r `elem` (allDerivs sigma d)
+             
+diagnose :: String -> Either String Bool
+diagnose src = case parsePat src of
+  { Left err -> Left $ "Unable to parse regex '" ++ src ++ "'. Error: " ++ show err
+  ; Right pat -> 
+       let r   = strip(pat)
+       in Right $ evil ascii r
+  }
+                

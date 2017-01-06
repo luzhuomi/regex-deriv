@@ -6,6 +6,7 @@ module Text.Regex.Deriv.Diagnosis.Ambiguity
        , diagnoseRE
        , deriv
        , simp
+       , flatU
        ) where
 
 import Data.List 
