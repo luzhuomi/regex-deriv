@@ -11,7 +11,10 @@ module Text.Regex.Deriv.Diagnosis.Ambiguity
 import Data.List 
 import Data.Char
 import Data.Maybe 
+import qualified Data.BloomFilter as BF
+import Data.BloomFilter.Hash (cheapHashes, Hashable(..), hashOne32, hashList32)
 import qualified Data.Map as M
+import Data.Word (Word32, Word64)
 
 import Text.Regex.Deriv.RE
 import Text.Regex.Deriv.Common
@@ -19,6 +22,11 @@ import Text.Regex.Deriv.Pretty
 import Text.Regex.Deriv.IntPattern (strip)
 import Text.Regex.Deriv.Parse
 import System.IO.Unsafe (unsafePerformIO)
+import Control.Monad (foldM)
+
+
+
+
 
 -- Parse tree representation
 data U where
@@ -171,14 +179,14 @@ simpStep (Seq Phi r) = (Phi, undefined, False)
 simpStep (Choice [r] gf) = (r, \u -> [AltU 0 u], False) -- todo
 simpStep (Choice rs gf)  = 
   let rfbs            = map simpStep rs 
-      (rs1, fs1, bs1) = unzip3 rfbs
+      (rs1, fs1, bs1) = rfbs `seq` unzip3 rfbs
       f1 :: U -> [U] 
       f1 (AltU n v)   = [AltU n u | u <- (fs1 !! n) v]
       f1 u            = [u]
-      b1              = any (== True) bs1
-      (r2, f2)        = rmAltPhi (Choice rs1 gf)
-      (r3, f3)        = flat r2 
-      (r4, f4, b4)    = (fixs3 nubChoice) r3
+      b1              = bs1 `seq` any (== True) bs1
+      (r2, f2)        = rs1 `seq` rmAltPhi (Choice rs1 gf)
+      (r3, f3)        = r2 `seq` flat r2 
+      (r4, f4, b4)    = r3 `seq` (fixs3 nubChoice) r3
   in (r4, f1 .:. f2 .:. f3 .:. f4, b1 || b4) 
 simpStep (Seq r1 r2)      = 
   let (r1',f1, b1) = simpStep r1 
@@ -186,7 +194,7 @@ simpStep (Seq r1 r2)      =
       f = \u -> case u of 
         { Pair (u1,u2) -> [ Pair (u1',u2') | u1' <- f1 u1, u2' <- f2 u2] 
         ; u -> error $ "simpStep " ++ (show (Seq r1 r2)) ++ " " ++ show u }
-  in (Seq r1' r2', f, b1 || b2)
+  in r1' `seq` r2' `seq` (Seq r1' r2', f, b1 || b2)
 simpStep r = (r, \u ->[u], False)     
 
 
@@ -284,6 +292,7 @@ nubChoice :: RE -> (RE, U -> [U], Bool)
 nubChoice (Choice [r1, r2] gf) | r1 == r2 = (r1, \u -> [AltU 0 u, AltU 1 u], not $ isPhi r1)
 nubChoice r@(Choice _ _)      = 
   let (r', f, m, idx, b) = nubChoiceWith r 0 M.empty 
+  -- let (r', f, m, idx, b) = nubChoiceWithBF r 0 bfm_empty
   in (r', f, b)
 nubChoice r = (r, \u ->[u], False) -- todo: why this is needed?
                                                                                         
@@ -300,7 +309,75 @@ nubChoiceWith (Choice (r1:rs) gf) idx m =
          -- -----------------------------
          -- M |- r1 + r2...rN --> r2'...rM'
          let m' = M.update (\_ -> Just (idxs ++[idx])) r1 m
-             (Choice rs' _, g, m'', idx', b) = nubChoiceWith (Choice rs gf) (idx+1) m'
+             (Choice rs' _, g, m'', idx', b) = m' `seq` idx `seq` nubChoiceWith (Choice rs gf) (idx+1) m'
+             f = \u -> [right v | v <- g $ unRight u ]
+         in rs' `seq` m'' `seq` (Choice rs' gf, f, m'', idx', not $ isPhi r1)
+-- TRICKY: use not $ isPhi r1 instead of True
+-- elminating phi doesn't lead to ambiguities            
+    ; Nothing -> 
+           -- r1 \not \in M   M U {r1} |- r2...rN --> r2'...rM'
+           -- ---------------------------------------
+           -- M |- r1 + r2 --> r1 + r2'...rM'
+           let m' = M.insert r1 [idx] m
+               (Choice rs' _, g, m'', idx', b) = m' `seq` idx `seq` nubChoiceWith (Choice rs gf) (idx+1) m'
+               idxs = m'' `seq` ( case M.lookup r1 m'' of -- check
+                                     { Nothing -> [] 
+                                     ; Just idxs' -> idxs' } )
+               f = \u -> case u of
+                 { AltU 0 v -> map (\i -> mkCons (i - idx) v) idxs
+                 ; AltU n v -> [right w | w <- g $ unRight u] 
+                 }
+           in m'' `seq` rs' `seq` idx' `seq` (Choice (r1:rs') gf, f, m'', idx', b)           
+    }
+nubChoiceWith (Choice [] gf) idx m = (Choice [] gf, \u -> [u], m, idx, False)  
+nubChoiceWith r idx m = (r, \u -> [u], m, idx, False) -- todo: why this is needed
+
+
+data BFMap a b = BFMap (M.Map a b) (BF.Bloom a)
+
+bfm_empty :: (Hashable a, Ord a) => BFMap a b
+bfm_empty = BFMap M.empty (BF.empty (cheapHashes 1) 1024)
+
+bfm_lookup :: (Hashable a, Ord a) => a -> BFMap a b -> Maybe b
+bfm_lookup a (BFMap mmap bf) 
+  | a `BF.elem` bf = M.lookup a mmap
+  | otherwise      = Nothing
+                     
+bfm_update :: (Hashable a, Ord a) => (b -> Maybe b) -> a -> BFMap a b -> BFMap a b
+bfm_update f a (BFMap mmap bf) = BFMap (M.update f a mmap) bf
+
+bfm_insert :: (Hashable a, Ord a) => a -> b -> BFMap a b -> BFMap a b
+bfm_insert a b (BFMap mmap bf) = BFMap (M.insert a b mmap) (BF.insert a bf)
+  
+
+
+instance Hashable RE where 
+  hashIO32 Phi salt = hashOne32 (2::Int) salt
+  hashIO32 Eps salt = hashOne32 (3::Int) salt
+  hashIO32 (Choice rs Greedy) salt = foldM (\w r -> hashIO32 r w) salt rs
+  hashIO32 (Choice rs NotGreedy) salt = foldM (\w r -> hashIO32 r w) (salt+1) rs
+  hashIO32 (Seq r1 r2) salt = hashIO32 r1 salt >>= hashIO32 r2
+  hashIO32 (Star r Greedy) salt = hashIO32 r (salt+1)
+  hashIO32 (Star r NotGreedy) salt = hashIO32 r (salt+2)
+  hashIO32 (L c) salt = hashIO32 c salt
+  hashIO32 Any salt = hashOne32 (5::Int) salt
+  hashIO32 (Not cs) salt = hashList32 cs salt
+
+-- slower than  nubChoiceWith, hashIO32 is still called many times
+-- | a global nub, e.g. (r1+r2+r3+r1) ---> (r1+r2+r3)
+-- | prereq: the input re choice must be in right assoc form
+-- | the second para of type Int keep track of the position of the current choice option
+-- | the third para of type Map RE [Int] keep tracks of the list of unique options that we have seen starting from the left most, the payload of type [Int]
+-- | captures the positions of the original/duplicate copy of the choice.
+nubChoiceWithBF :: RE -> Int -> BFMap RE [Int] -> (RE, U -> [U], BFMap RE [Int], Int, Bool)
+nubChoiceWithBF (Choice (r1:rs) gf) idx m  = 
+  case bfm_lookup r1 m of 
+    { Just idxs -> 
+         -- r1 \in M    M |- r2...rN --> r2'...rM'
+         -- -----------------------------
+         -- M |- r1 + r2...rN --> r2'...rM'
+         let m' = bfm_update (\_ -> Just (idxs ++[idx])) r1 m
+             (Choice rs' _, g, m'', idx', b) = nubChoiceWithBF (Choice rs gf) (idx+1) m'
              f = \u -> [right v | v <- g $ unRight u ]
          in (Choice rs' gf, f, m'', idx', not $ isPhi r1)
 -- TRICKY: use not $ isPhi r1 instead of True
@@ -309,9 +386,9 @@ nubChoiceWith (Choice (r1:rs) gf) idx m =
            -- r1 \not \in M   M U {r1} |- r2...rN --> r2'...rM'
            -- ---------------------------------------
            -- M |- r1 + r2 --> r1 + r2'...rM'
-           let m' = M.insert r1 [idx] m
-               (Choice rs' _, g, m'', idx', b) = nubChoiceWith (Choice rs gf) (idx+1) m'
-               idxs = ( case M.lookup r1 m'' of -- check
+           let m' = bfm_insert r1 [idx] m
+               (Choice rs' _, g, m'', idx', b) = nubChoiceWithBF (Choice rs gf) (idx+1) m'
+               idxs = ( case bfm_lookup r1 m'' of -- check
                            { Nothing -> [] 
                            ; Just idxs' -> idxs' } )
                f = \u -> case u of
@@ -320,8 +397,8 @@ nubChoiceWith (Choice (r1:rs) gf) idx m =
                  }
            in (Choice (r1:rs') gf, f, m'', idx', b)           
     }
-nubChoiceWith (Choice [] gf) idx m = (Choice [] gf, \u -> [u], m, idx, False)  
-nubChoiceWith r idx m = (r, \u -> [u], m, idx, False) -- todo: why this is needed
+nubChoiceWithBF (Choice [] gf) idx m = (Choice [] gf, \u -> [u], m, idx, False)  
+nubChoiceWithBF r idx m = (r, \u -> [u], m, idx, False) -- todo: why this is needed
 
 {-
 a + b + c + a --> a + b + c
@@ -358,7 +435,8 @@ data FSX = FSX { start :: RE,
                  transitions :: [(RE,Char,RE,U->[U])],
                  ambig1 :: [RE],
                  ambig2 :: [(RE,Char,RE)],
-                 ambig3 :: [(RE,Char,RE)] }
+                 ambig3 :: [(RE,Char,RE)]
+               }
 
 instance Show FSX where
   show fsx = unlines [ "start: " ++ (show $ start fsx)
@@ -368,6 +446,7 @@ instance Show FSX where
                      , "ambig2:" ++ (show $ ambig2 fsx)
                      , "ambig3:" ++ (show $ ambig3 fsx) ]
 
+{-
 buildFSX :: RE -> FSX
 buildFSX r = 
   let sig = sigmaRE r
@@ -417,6 +496,62 @@ buildFSX r =
             new_ambig3 = map fst $ filter (\((_,_,r),b) -> b && (not (isPhi r))) $
                             [ ((r,l,simp $ fst df), simpAmbig $ fst df ) | df <- dfs ]
             -}
+
+            new_fsx = FSX { start = start fsx,
+                            final = (final fsx) ++ filter nullable new_rs,
+                            states = (states fsx) ++ new_rs,
+                            transitions = (transitions fsx) ++ new_ts,
+                            ambig1 = nub $ ambig1 fsx ++ new_ambig1,
+                            ambig2 = nub $ ambig2 fsx ++ new_ambig2,
+                            ambig3 = nub $ ambig3 fsx ++ new_ambig3 }
+
+        in if length new_rs == 0
+           then new_fsx
+           else go (rs ++ new_rs, new_fsx) new_rs 
+
+  in let fsx = FSX { start = r,
+                     final = if nullable r then [r] else [],
+                     states = [r],
+                     transitions = [],
+                     ambig1 = [],
+                     ambig2 = [],
+                     ambig3 = [] }
+     in go ([r],fsx) [r]
+-}
+buildFSX :: RE -> FSX
+buildFSX r = 
+  let sig = sigmaRE r
+      
+      -- building the possible transitions given a re and a char
+      mkTransitions :: RE -> Char -> [ (RE, Char , RE, U ->[U]) ]
+      mkTransitions r l = 
+        let d = deriv r l 
+            (r'',fSimp, _ ) = simp3 d
+        in [(r, l, r'', \u -> nub $ concat [ injDs r d l u' | u' <- fSimp u ]) | not (isPhi r'')]
+           
+      -- main iteration
+      go :: ([RE], FSX) -> [RE] -> FSX
+      go (rs, fsx) curr_rs = 
+        let new_ts = concat $ map (\(l,r) -> mkTransitions r l)
+                         [ (l,r) | r <- curr_rs, 
+                                   l <- sig ]
+
+            new_rs = nub [ r | (_,_,r,_) <- new_ts,
+                               not (isPhi r) && not (elem r rs) ]
+
+            -- record ambiguous state A1
+            new_ambig1 = filter (\r -> testAmbigCase1 r) rs
+
+            fstOf3 (x,y,z) = x
+            
+            -- intermediate data for new_ambig2 & 3
+            trans_flags = filter (\((_,_,r),_,_) -> not $ isPhi r) $ [ ((r,l,rs), bd, bs) | r <- rs, l <- sig, let (rd,bd) = deriv2 r l, let (rs,fs,bs) = simp3 rd ]
+            
+            -- record ambiguous transition A2
+            new_ambig2 = trans_flags `seq` (map fstOf3 $ filter (\((_,_,r),bd,bs) -> bd ) $ trans_flags)
+            
+            -- record ambiguous transition A3
+            new_ambig3 = trans_flags `seq` (map fstOf3 $ filter (\((_,_,r),bd,bs) -> bs ) $ trans_flags)
 
             new_fsx = FSX { start = start fsx,
                             final = (final fsx) ++ filter nullable new_rs,
