@@ -4,6 +4,7 @@ module Text.Regex.Deriv.Diagnosis.Ambiguity
        , diagnoseU
        , diagnose
        , diagnoseRE
+       , diagnosePrefStr
        , deriv
        , simp
        , flatU
@@ -644,8 +645,12 @@ data AmbigTrans = A1 (RE,Char,RE, U->[U], [(RE,Char,U->[U])]) -- ^ current state
                 | A3 (RE,Char,RE, U->[U], [(RE,Char,U->[U])])
 
 
-findMinCounterEx :: FSX -> [U]
-findMinCounterEx fsx = 
+findMinCounterEx :: FSX -> [U] 
+findMinCounterEx fsx = fst (findMinCounterEx1 fsx)
+
+
+findMinCounterEx1 :: FSX -> ([U], [Char])
+findMinCounterEx1 fsx = 
   let findNextTrans :: RE -> [(RE, Char, RE, U->[U])]
       findNextTrans r = filter (\(s,c,t,f) -> s == r) (transitions fsx)
       
@@ -673,24 +678,31 @@ findMinCounterEx fsx =
                in goUntilAmbig next_states_prefices (trans_sofar ++ (map (\(s,l,t,_,_) -> (s,l,t)) next_trans_prefices))
              }
   in case (goUntilAmbig [(start fsx, [])] []) of 
-    { Nothing -> [] 
+    { Nothing -> ([],[])
     ; Just (A1 (r,l,t,f,pf)) -> 
       let ut = genV t
           urs = f ut
           (s,us) = foldl (\(t,us) (r,l,f) -> (r, concat [ f u | u <- us ])) (r,urs) pf
-      in us
+          prefix_str = reverse $ map (\(_,c,_) -> c) pf
+      in (us, prefix_str)
     ; Just (A2 (r,l,t,f,pf)) -> 
       let ut = genV t
           urs = f ut
           (s,us) = foldl (\(t,us) (r,l,f) -> (r, concat [ f u | u <- us ])) (r,urs) pf
-      in us
+          prefix_str = reverse $ map (\(_,c,_) -> c) pf
+      in (us, prefix_str)
     ; Just (A3 (r,l,t,f,pf)) -> 
       let ut = genV t
           urs = f ut
-          (s,us) = foldl (\(t,us) (r,l,f) -> 
-                           (r, concat [ f u | u <- us ])) (r,urs) pf
-      in us
+          (s,us) = foldl (\(t,us) (r,l,f) -> (r, concat [ f u | u <- us ])) (r,urs) pf
+          prefix_str = reverse $ map (\(_,c,_) -> c) pf
+      in (us, prefix_str)
     }
+
+-- function needed for evilness check
+findMinExPrefStr :: FSX -> [Char] 
+findMinExPrefStr fsx =  snd $ findMinCounterEx1 fsx
+
 
 diagnoseU :: String -> Either String [U]
 diagnoseU src = case parsePat src of
@@ -712,6 +724,12 @@ diagnoseRE :: RE -> [U]
 diagnoseRE r = 
   let fsx = buildFSX r
   in findMinCounterEx fsx
+     
+-- instead of creating the counter examples, return the prefix strings
+diagnosePrefStr :: RE -> [Char]     
+diagnosePrefStr r = 
+  let fsx = buildFSX r
+  in findMinExPrefStr fsx
 
 
 re2dot :: String -> FilePath -> IO ()

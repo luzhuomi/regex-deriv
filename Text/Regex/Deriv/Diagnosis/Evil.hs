@@ -19,7 +19,7 @@ import Text.Regex.Deriv.Common
 import Text.Regex.Deriv.Pretty
 import Text.Regex.Deriv.IntPattern (strip)
 import Text.Regex.Deriv.Parse
-import Text.Regex.Deriv.Diagnosis.Ambiguity (deriv,simp,diagnoseRE,flatU)
+import Text.Regex.Deriv.Diagnosis.Ambiguity (deriv,simp,diagnoseRE,flatU, diagnosePrefStr)
 import Text.Regex.Deriv.Diagnosis.Universality (allDerivs, universal, ascii)
 
 {-
@@ -50,6 +50,7 @@ diagnose src = case parsePat src of
   }
                
 -- diagnose "^([a-zA-Z0-9_\\.\\-])+\\@(([a-zA-Z0-9\\-])+\\.)+([a-zA-Z0-9]{2,4})+$"               
+-- diagnose "^((a|b|(ab))*c|([abcd])*)$"
 -}
 
 -- Evil test
@@ -75,17 +76,17 @@ allPDerivs sigma r = go [] [r]
 evil :: [Char] -> RE -> Bool
 evil sigma r = -- todo: optimization needed, deriv(r') should be a subset of deriv(r)
   let allR' = allPDerivs sigma r
-  in any ambig_loop (filter (not . (universal sigma)) allR')
+  in any ambig_loop allR'
     where ambig_loop :: RE -> Bool 
-          ambig_loop r' = case diagnoseRE r' of
+          ambig_loop r' = case diagnosePrefStr r' of
             { [] -> False
-            ; counter_exs -> any (\ex -> is_a_loop_prefix r' (flatU ex)) counter_exs
+            ; str -> (is_a_loop_prefix r' str)&& (not (universal sigma r' ))
             }
           is_a_loop_prefix :: RE -> [Char] -> Bool
           is_a_loop_prefix r p = 
             let d = foldl (\x l -> simp $ deriv x l) r p -- follow the prefix
                     -- check whether r is a descendant of d
-            in r `elem` (allDerivs sigma d)
+            in r `elem` (allDerivs sigma d) 
              
 diagnose :: String -> Either String Bool
 diagnose src = case parsePat src of
@@ -95,3 +96,7 @@ diagnose src = case parsePat src of
        in Right $ evil ascii r
   }
                 
+a = L 'a'               
+b = L 'b'
+c = L 'c'
+x1 = Seq (Star (Choice [a, b, Seq a b] Greedy) Greedy) c
