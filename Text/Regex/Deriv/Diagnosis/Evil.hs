@@ -53,8 +53,9 @@ diagnose src = case parsePat src of
 -- diagnose "^((a|b|(ab))*c|([abcd])*)$"
 -}
 
+-- (why partial derivatives? (a+b+ab)*c + sigma*)
 -- Evil test
--- Let pderiv(sigma*)(r) denotes all partial derivative descandants of r (why partial derivatives? (a+b+ab)*c + sigma*
+-- Let pderiv(sigma*)(r) denotes all partial derivative descandants of r 
 -- We say r is evil iff there exists r' in pderiv(sigma*)(r) such that
 --   1) r' is ambigous and 
 --   2) r' has an ambiguous prefix p where r' --p--> r'

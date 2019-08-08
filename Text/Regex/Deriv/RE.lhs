@@ -257,3 +257,7 @@
 >     simplify (Star r g) = Star (simplify r) g
 >     simplify Phi = Phi
 >     simplify Eps = Eps
+
+
+
+

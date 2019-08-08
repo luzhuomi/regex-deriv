@@ -17,8 +17,9 @@ Cabal-Version:          >= 1.2.3
 flag base4
 
 library 
-  Build-Depends:        regex-base >= 0.93.1, parsec, mtl, containers, bytestring, deepseq, hashable >= 1.2.0.5, hashtables, dequeue, bloomfilter >= 2.0
-  Build-Depends:	bitset, parallel
+  Build-Depends:        regex-base >= 0.93.1, parsec, mtl, containers, bytestring, deepseq, hashable >= 1.2.0.5, hashtables, bloomfilter, parallel
+  -- Build-Depends:         dequeue, bloomfilter >= 2.0, parallel
+  -- Build-Depends:         bitset
   Build-Depends:         base >= 4.0 && < 5.0, ghc-prim
   Exposed-Modules:       Text.Regex.Deriv.ByteString
                          Text.Regex.Deriv.ByteString.Posix
